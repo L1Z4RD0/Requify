@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Requify - Dashboard Administrador</title>
+    
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- Font Awesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- CSS personalizado -->
+    <link rel="stylesheet" href="../css/dashboard.css">
+</head>
+<body>
+    <!-- Sidebar -->
+    <div class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <i class="fas fa-book-reader"></i>
+            <h4>Requify</h4>
+        </div>
+        
+        <div class="user-info">
+            <div class="user-avatar">
+                <i class="fas fa-user-shield"></i>
+            </div>
+            <div class="user-details">
+                <strong id="nombreUsuario">Pedro Fernández</strong>
+                <small id="rolUsuario">Administrador</small>
+            </div>
+        </div>
+        
+        <nav class="sidebar-nav">
+            <a href="#" class="nav-link active" data-section="dashboard">
+                <i class="fas fa-home"></i> Inicio
+            </a>
+            <a href="#" class="nav-link" data-section="usuarios">
+                <i class="fas fa-users"></i> Gestión de Usuarios
+            </a>
+            <a href="#" class="nav-link" data-section="prestamos">
+                <i class="fas fa-handshake"></i> Préstamos
+            </a>
+            <a href="#" class="nav-link" data-section="inventario">
+                <i class="fas fa-boxes"></i> Inventario
+            </a>
+            <a href="#" class="nav-link" data-section="reportes">
+                <i class="fas fa-chart-bar"></i> Reportes
+            </a>
+        </nav>
+        
+        <div class="sidebar-footer">
+            <a href="#" id="cerrarSesion" class="btn btn-danger btn-sm w-100">
+                <i class="fas fa-sign-out-alt"></i> Cerrar Sesión
+            </a>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="main-content">
+        <!-- Header -->
+        <header class="top-header">
+            <button class="btn btn-link" id="toggleSidebar">
+                <i class="fas fa-bars"></i>
+            </button>
+            <h2 id="pageTitle">Dashboard</h2>
+            <div class="header-actions">
+                <span class="badge bg-primary">
+                    <i class="fas fa-calendar"></i> <span id="fechaActual"></span>
+                </span>
+            </div>
+        </header>
+
+        <!-- Dashboard Content -->
+        <div class="content-area">
+            <!-- Sección: Dashboard -->
+            <div id="section-dashboard" class="content-section active">
+                <div class="row g-4 mb-4">
+                    <div class="col-md-3">
+                        <div class="stat-card bg-primary">
+                            <div class="stat-icon">
+                                <i class="fas fa-users"></i>
+                            </div>
+                            <div class="stat-info">
+                                <h3 id="totalUsuarios">0</h3>
+                                <p>Usuarios Registrados</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-3">
+                        <div class="stat-card bg-success">
+                            <div class="stat-icon">
+                                <i class="fas fa-handshake"></i>
+                            </div>
+                            <div class="stat-info">
+                                <h3 id="prestamosActivos">0</h3>
+                                <p>Préstamos Activos</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-3">
+                        <div class="stat-card bg-warning">
+                            <div class="stat-icon">
+                                <i class="fas fa-clock"></i>
+                            </div>
+                            <div class="stat-info">
+                                <h3 id="prestamosVencidos">0</h3>
+                                <p>Préstamos Vencidos</p>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-3">
+                        <div class="stat-card bg-info">
+                            <div class="stat-icon">
+                                <i class="fas fa-boxes"></i>
+                            </div>
+                            <div class="stat-info">
+                                <h3 id="totalMateriales">170</h3>
+                                <p>Total Materiales</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="row g-4">
+                    <div class="col-md-8">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5><i class="fas fa-chart-line"></i> Actividad Reciente</h5>
+                            </div>
+                            <div class="card-body">
+                                <div id="actividadReciente" class="activity-list">
+                                    <p class="text-muted text-center">No hay actividad reciente</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-4">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5><i class="fas fa-exclamation-triangle"></i> Alertas</h5>
+                            </div>
+                            <div class="card-body">
+                                <div id="alertasSistema" class="alerts-list">
+                                    <p class="text-muted text-center">No hay alertas</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sección: Gestión de Usuarios -->
+            <div id="section-usuarios" class="content-section">
+                <div class="card mb-4">
+                    <div class="card-header d-flex justify-content-between align-items-center">
+                        <h5><i class="fas fa-user-plus"></i> Agregar Nuevo Usuario</h5>
+                        <button class="btn btn-sm btn-primary" id="btnMostrarFormulario">
+                            <i class="fas fa-plus"></i> Nuevo Usuario
+                        </button>
+                    </div>
+                    <div class="card-body" id="formularioUsuario" style="display: none;">
+                        <form id="formAgregarUsuario">
+                            <div class="row g-3">
+                                <div class="col-md-6">
+                                    <label class="form-label">Nombre Completo *</label>
+                                    <input type="text" class="form-control" id="nombreCompleto" required>
+                                </div>
+                                
+                                <div class="col-md-6">
+                                    <label class="form-label">RUT *</label>
+                                    <input type="text" class="form-control" id="rut" placeholder="12.345.678-9" required>
+                                </div>
+                                
+                                <div class="col-md-6">
+                                    <label class="form-label">Email *</label>
+                                    <input type="email" class="form-control" id="email" required>
+                                </div>
+                                
+                                <div class="col-md-6">
+                                    <label class="form-label">Teléfono</label>
+                                    <input type="tel" class="form-control" id="telefono" placeholder="+56 9 1234 5678">
+                                </div>
+                                
+                                <div class="col-md-6">
+                                    <label class="form-label">Rol *</label>
+                                    <select class="form-select" id="rolUsuarioNuevo" required>
+                                        <option value="">Seleccione un rol</option>
+                                        <option value="Encargado de Recursos">Encargado de Recursos</option>
+                                        <option value="Docente">Docente</option>
+                                        <option value="Personal Administrativo">Personal Administrativo</option>
+                                    </select>
+                                </div>
+                                
+                                <div class="col-md-6">
+                                    <label class="form-label">Usuario *</label>
+                                    <input type="text" class="form-control" id="username" required>
+                                </div>
+                                
+                                <div class="col-md-6">
+                                    <label class="form-label">Contraseña *</label>
+                                    <input type="password" class="form-control" id="passwordNuevo" required>
+                                </div>
+                                
+                                <div class="col-md-6">
+                                    <label class="form-label">Confirmar Contraseña *</label>
+                                    <input type="password" class="form-control" id="confirmarPassword" required>
+                                </div>
+                                
+                                <div class="col-12">
+                                    <div class="form-check">
+                                        <input class="form-check-input" type="checkbox" id="usuarioActivo" checked>
+                                        <label class="form-check-label" for="usuarioActivo">
+                                            Usuario activo
+                                        </label>
+                                    </div>
+                                </div>
+                                
+                                <div class="col-12">
+                                    <button type="submit" class="btn btn-success">
+                                        <i class="fas fa-save"></i> Guardar Usuario
+                                    </button>
+                                    <button type="button" class="btn btn-secondary" id="btnCancelarFormulario">
+                                        <i class="fas fa-times"></i> Cancelar
+                                    </button>
+                                </div>
+                            </div>
+                        </form>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-list"></i> Usuarios Registrados</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Nombre</th>
+                                        <th>Usuario</th>
+                                        <th>Rol</th>
+                                        <th>Email</th>
+                                        <th>Estado</th>
+                                        <th>Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tablaUsuarios">
+                                    <tr>
+                                        <td colspan="7" class="text-center text-muted">No hay usuarios registrados</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sección: Préstamos -->
+            <div id="section-prestamos" class="content-section">
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5><i class="fas fa-search"></i> Buscar Préstamos</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <input type="text" class="form-control" id="buscarPrestamo" placeholder="Buscar por alumno o material...">
+                            </div>
+                            <div class="col-md-3">
+                                <select class="form-select" id="filtroEstado">
+                                    <option value="">Todos los estados</option>
+                                    <option value="activo">Activos</option>
+                                    <option value="devuelto">Devueltos</option>
+                                    <option value="vencido">Vencidos</option>
+                                </select>
+                            </div>
+                            <div class="col-md-3">
+                                <select class="form-select" id="filtroMaterial">
+                                    <option value="">Todos los materiales</option>
+                                    <option value="Tablet">Tablets</option>
+                                    <option value="Notebook">Notebooks</option>
+                                    <option value="Libro">Libros</option>
+                                    <option value="Material Deportivo">Material Deportivo</option>
+                                </select>
+                            </div>
+                            <div class="col-md-2">
+                                <button class="btn btn-primary w-100" id="btnBuscarPrestamos">
+                                    <i class="fas fa-search"></i> Buscar
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <h5><i class="fas fa-list"></i> Lista de Préstamos</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>ID</th>
+                                        <th>Alumno</th>
+                                        <th>Material</th>
+                                        <th>Cantidad</th>
+                                        <th>Fecha Préstamo</th>
+                                        <th>Fecha Devolución</th>
+                                        <th>Estado</th>
+                                        <th>Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tablaPrestamos">
+                                    <tr>
+                                        <td colspan="8" class="text-center text-muted">No hay préstamos registrados</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sección: Inventario -->
+            <div id="section-inventario" class="content-section">
+                <div class="row g-4">
+                    <div class="col-md-3" id="cardTablets">
+                        <div class="card inventory-card">
+                            <div class="card-body text-center">
+                                <i class="fas fa-tablet-alt fa-3x text-primary mb-3"></i>
+                                <h5>Tablets</h5>
+                                <h2 class="text-primary"><span id="tabletsDisponibles">20</span> / 20</h2>
+                                <div class="progress mb-2" style="height: 10px;">
+                                    <div class="progress-bar bg-primary" id="progressTablets" style="width: 100%"></div>
+                                </div>
+                                <small class="text-muted"><span id="tabletsPrestadas">0</span> en préstamo</small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-3" id="cardNotebooks">
+                        <div class="card inventory-card">
+                            <div class="card-body text-center">
+                                <i class="fas fa-laptop fa-3x text-success mb-3"></i>
+                                <h5>Notebooks</h5>
+                                <h2 class="text-success"><span id="notebooksDisponibles">100</span> / 100</h2>
+                                <div class="progress mb-2" style="height: 10px;">
+                                    <div class="progress-bar bg-success" id="progressNotebooks" style="width: 100%"></div>
+                                </div>
+                                <small class="text-muted"><span id="notebooksPrestadas">0</span> en préstamo</small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-3" id="cardLibros">
+                        <div class="card inventory-card">
+                            <div class="card-body text-center">
+                                <i class="fas fa-book fa-3x text-info mb-3"></i>
+                                <h5>Libros</h5>
+                                <h2 class="text-info"><span id="librosDisponibles">50</span> / 50</h2>
+                                <div class="progress mb-2" style="height: 10px;">
+                                    <div class="progress-bar bg-info" id="progressLibros" style="width: 100%"></div>
+                                </div>
+                                <small class="text-muted"><span id="librosPrestados">0</span> en préstamo</small>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-3" id="cardDeportivo">
+                        <div class="card inventory-card">
+                            <div class="card-body text-center">
+                                <i class="fas fa-futbol fa-3x text-warning mb-3"></i>
+                                <h5>Material Deportivo</h5>
+                                <h2 class="text-warning"><span id="deportivoDisponible">30</span> / 30</h2>
+                                <div class="progress mb-2" style="height: 10px;">
+                                    <div class="progress-bar bg-warning" id="progressDeportivo" style="width: 100%"></div>
+                                </div>
+                                <small class="text-muted"><span id="deportivoPrestado">0</span> en préstamo</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card mt-4">
+                    <div class="card-header">
+                        <h5><i class="fas fa-chart-pie"></i> Detalles del Inventario</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table">
+                                <thead>
+                                    <tr>
+                                        <th>Material</th>
+                                        <th>Total</th>
+                                        <th>Disponibles</th>
+                                        <th>En Préstamo</th>
+                                        <th>% Utilización</th>
+                                        <th>Estado</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tablaInventarioDetalle">
+                                    <!-- Se llenará dinámicamente -->
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sección: Reportes -->
+            <div id="section-reportes" class="content-section">
+                <div class="row g-4">
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5><i class="fas fa-chart-bar"></i> Préstamos por Material</h5>
+                            </div>
+                            <div class="card-body">
+                                <canvas id="chartMateriales" height="200"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="col-md-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5><i class="fas fa-chart-line"></i> Actividad Mensual</h5>
+                            </div>
+                            <div class="card-body">
+                                <canvas id="chartActividad" height="200"></canvas>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card mt-4">
+                    <div class="card-header">
+                        <h5><i class="fas fa-download"></i> Exportar Reportes</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row g-3">
+                            <div class="col-md-4">
+                                <button class="btn btn-success w-100" id="exportarExcel">
+                                    <i class="fas fa-file-excel"></i> Exportar a Excel
+                                </button>
+                            </div>
+                            <div class="col-md-4">
+                                <button class="btn btn-danger w-100" id="exportarPDF">
+                                    <i class="fas fa-file-pdf"></i> Exportar a PDF
+                                </button>
+                            </div>
+                            <div class="col-md-4">
+                                <button class="btn btn-primary w-100" id="imprimirReporte">
+                                    <i class="fas fa-print"></i> Imprimir Reporte
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    
+    <!-- Script personalizado -->
+    <script src="../js/dashboard-admin.js"></script>
+</body>
+</html>
