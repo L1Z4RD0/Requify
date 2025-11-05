@@ -357,7 +357,7 @@ app.post('/api/prestamos/crear', (req, res) => {
 
 
 // ==========================================================
-// ENDPOINT PARA PRÉSTAMOS ACTIVOS (POR ENCARGADO)
+// ENDPOINT PARA PRÉSTAMOS ACTIVOS (MEJORADO)
 // ==========================================================
 app.get('/api/prestamos/activos/:id_usuario', (req, res) => {
     const { id_usuario } = req.params;
@@ -365,6 +365,8 @@ app.get('/api/prestamos/activos/:id_usuario', (req, res) => {
     const sql = `
         SELECT 
             S.ID_SOLICITUD,
+            DS.ID_DETALLE,    /* <-- AÑADIDO */
+            M.ID_MATERIAL,    /* <-- AÑADIDO */
             A.NOMBRE as ALUMNO_NOMBRE,
             A.APELLIDO as ALUMNO_APELLIDO,
             A.CURSO,
@@ -381,11 +383,99 @@ app.get('/api/prestamos/activos/:id_usuario', (req, res) => {
         WHERE S.ESTADO = 1 AND S.ID_USUARIO = ?
         ORDER BY S.FECHA_DEVOLUCION ASC
     `;
+    db.query(sql, [id_usuario], (err, results) => {
+        if (err) { console.error(err); return res.status(500).json({ message: 'Error al obtener préstamos activos' }); }
+        res.json(results);
+    });
+});
+
+// ==========================================================
+// ENDPOINT PARA DEVOLVER UN PRÉSTAMO 
+// ==========================================================
+app.post('/api/prestamos/devolver', (req, res) => {
+    // Obtenemos los datos del modal y del usuario logueado
+    const {
+        id_solicitud,
+        id_detalle,
+        id_material,
+        id_usuario_encargado, // El ID del que presiona el botón
+        cantidad_recibida,
+        estado_material,
+        observaciones,
+        fecha_recepcion
+    } = req.body;
+
+    // ¡Usamos una transacción! O todo funciona, o nada se guarda.
+    db.beginTransaction(err => {
+        if (err) { throw err; }
+
+        // 1. Actualizar el ESTADO de la SOLICITUD (de 1 'Activo' a 2 'Completado')
+        const sqlSolicitud = 'UPDATE SOLICITUDES SET ESTADO = 2 WHERE ID_SOLICITUD = ?';
+        db.query(sqlSolicitud, [id_solicitud], (err, result) => {
+            if (err) { return db.rollback(() => { console.error(err); res.status(500).json({ message: "Error al actualizar la solicitud" }); }); }
+
+            // 2. Devolver el stock al INVENTARIO
+            const sqlInventario = 'UPDATE MATERIALES SET CANTIDAD_DISPONIBLE = CANTIDAD_DISPONIBLE + ? WHERE ID_MATERIAL = ?';
+            db.query(sqlInventario, [cantidad_recibida, id_material], (err, result) => {
+                if (err) { return db.rollback(() => { console.error(err); res.status(500).json({ message: "Error al actualizar inventario" }); }); }
+
+                // 3. Crear el registro en RECEPCIONES_MATERIAL (como pediste)
+                const sqlRecepcion = `
+                    INSERT INTO RECEPCIONES_MATERIAL (ID_DETALLE, ID_USUARIO, CANTIDAD_RECIBIDA, ESTADO_MATERIAL, OBSERVACIONES, FECHA_RECEPCION)
+                    VALUES (?, ?, ?, ?, ?, ?)
+                `;
+                db.query(sqlRecepcion, [id_detalle, id_usuario_encargado, cantidad_recibida, estado_material, observaciones, fecha_recepcion], (err, result) => {
+                    if (err) { return db.rollback(() => { console.error(err); res.status(500).json({ message: "Error al crear la recepción" }); }); }
+
+                    // (Opcional) Actualizamos también nuestra tabla "parche"
+                    const sqlDetalle = 'UPDATE DETALLE_SOLICITUD SET ESTADO_DEVOLUCION = ?, OBSERVACIONES_DEVOLUCION = ? WHERE ID_DETALLE = ?';
+                    db.query(sqlDetalle, [estado_material, observaciones, id_detalle], (err, result) => {
+                        if (err) { return db.rollback(() => { console.error(err); res.status(500).json({ message: "Error al actualizar el detalle" }); }); }
+
+                        // 4. Si todo salió bien, CONFIRMAR
+                        db.commit(err => {
+                            if (err) { return db.rollback(() => { console.error(err); res.status(500).json({ message: "Error al confirmar" }); }); }
+                            res.status(200).json({ success: true, message: "¡Devolución registrada exitosamente!" });
+                        });
+                    });
+                });
+            });
+        });
+    });
+});
+
+
+// ==========================================================
+// ENDPOINT PARA EL HISTORIAL COMPLETO (POR ENCARGADO)
+// ==========================================================
+app.get('/api/prestamos/historial/:id_usuario', (req, res) => {
+    const { id_usuario } = req.params;
+
+    // Es casi igual al del Admin, pero con un "WHERE" para el ID del usuario
+    const sql = `
+        SELECT 
+            S.ID_SOLICITUD,
+            A.NOMBRE as ALUMNO_NOMBRE,
+            A.APELLIDO as ALUMNO_APELLIDO,
+            M.NOMBRE as MATERIAL_NOMBRE,
+            T.NOMBRE_TIPO_MATERIAL,
+            DS.CANTIDAD_ENTREGADA as CANTIDAD,
+            S.FECHA_SOLICITUD,
+            S.FECHA_DEVOLUCION,
+            S.ESTADO
+        FROM SOLICITUDES S
+        JOIN ALUMNOS A ON S.ID_ALUMNO = A.ID_ALUMNO
+        JOIN DETALLE_SOLICITUD DS ON S.ID_SOLICITUD = DS.ID_SOLICITUD
+        JOIN MATERIALES M ON DS.ID_MATERIAL = M.ID_MATERIAL
+        JOIN TIPO_MATERIALES T ON M.ID_TIPO_MATERIAL = T.ID_TIPO_MATERIAL
+        WHERE S.ID_USUARIO = ?
+        ORDER BY S.FECHA_SOLICITUD DESC
+    `;
 
     db.query(sql, [id_usuario], (err, results) => {
         if (err) {
             console.error(err);
-            return res.status(500).json({ message: 'Error al obtener préstamos activos' });
+            return res.status(500).json({ message: 'Error al obtener el historial' });
         }
         res.json(results);
     });
