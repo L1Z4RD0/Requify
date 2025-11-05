@@ -316,7 +316,7 @@ function editarUsuario(id) {
 async function cargarPrestamos() {
     const tablaPrestamos = document.getElementById('tablaPrestamos');
     try {
-        const response = await fetch(`${API_URL}/prestamos`);
+        const response = await fetch(`${API_URL}/prestamos`); // Llama al endpoint que acabamos de mejorar
         if (!response.ok) throw new Error('No se pudieron cargar los préstamos');
 
         const prestamos = await response.json();
@@ -327,9 +327,10 @@ async function cargarPrestamos() {
         }
 
         tablaPrestamos.innerHTML = prestamos.map((p, index) => {
-            let estadoBadge = 'bg-secondary'; // Devuelto
+            // Lógica para determinar el estado (Activo, Vencido, Devuelto)
+            let estadoBadge = 'bg-secondary';
             let estadoTexto = 'Devuelto';
-            if (p.ESTADO === 1) { // Activo
+            if (p.ESTADO === 1) { // 1 = Activo
                 if (new Date(p.FECHA_DEVOLUCION) < new Date()) {
                     estadoBadge = 'bg-danger';
                     estadoTexto = 'Vencido';
@@ -342,13 +343,14 @@ async function cargarPrestamos() {
             return `
                 <tr>
                     <td>${p.ID_SOLICITUD}</td>
-                    <td>${p.NOMBRE_ALUMNO}</td>
-                    <td>(Material)</td> <td>(Cant)</td>
+                    <td>${p.ALUMNO_NOMBRE} ${p.ALUMNO_APELLIDO}</td>
+                    <td>${p.MATERIAL_NOMBRE}</td>
+                    <td><span class="badge bg-info">${p.CANTIDAD}</span></td>
                     <td>${formatearFecha(p.FECHA_SOLICITUD)}</td>
                     <td>${formatearFecha(p.FECHA_DEVOLUCION)}</td>
                     <td><span class="badge ${estadoBadge}">${estadoTexto}</span></td>
                     <td>
-                        ${p.ESTADO === 1 ? `<button class="btn btn-sm btn-success">Devolver</button>` : ''}
+                        ${p.ESTADO === 1 ? `<button class="btn btn-sm btn-success" onclick="adminDevolver(${p.ID_SOLICITUD})">Devolver</button>` : ''}
                     </td>
                 </tr>
             `;
@@ -360,48 +362,82 @@ async function cargarPrestamos() {
     }
 }
 
+// ¡AÑADE ESTA FUNCIÓN AL FINAL DEL ARCHIVO!
+// (La necesitamos para el botón de devolver que acabamos de agregar)
+function adminDevolver(id) {
+    alert(`¡Función DEVOLVER (Admin) aún no conectada! Se devolvería el préstamo ID: ${id}`);
+    // La lógica sería idéntica a la del Encargado:
+    // 1. Abrir un modal
+    // 2. Llamar a un endpoint /api/prestamos/devolver/:id
+    // 3. Recargar la tabla
+}
+
 
 // ==========================================================
 // GESTIÓN DE INVENTARIO (Conectada)
 // ==========================================================
+// ==========================================================
+// GESTIÓN DE INVENTARIO (¡VERSIÓN CORREGIDA!)
+// ==========================================================
 async function actualizarInventario() {
-    const tablaInventario = document.getElementById('tablaInventarioDetalle');
+    // 1. OBTENER LOS DATOS MÁS RECIENTES DE LA API
+    let inventario;
     try {
         const response = await fetch(`${API_URL}/inventario`);
         if (!response.ok) throw new Error('No se pudo cargar el inventario');
-        
-        const inventario = await response.json();
-
-        if (inventario.length === 0) {
-            tablaInventario.innerHTML = `<tr><td colspan="6" class="text-center text-muted">No hay materiales registrados</td></tr>`;
-            return;
-        }
-        
-        tablaInventario.innerHTML = inventario.map(m => {
-            const enPrestamo = m.total - m.disponibles;
-            const utilizacion = (m.total > 0) ? ((enPrestamo / m.total) * 100).toFixed(1) : 0;
-            const estadoClass = utilizacion > 70 ? 'text-danger' : utilizacion > 40 ? 'text-warning' : 'text-success';
-            
-            return `
-                <tr>
-                    <td><strong>${m.nombre}</strong></td>
-                    <td>${m.total}</td>
-                    <td><span class="badge bg-success">${m.disponibles}</span></td>
-                    <td><span class="badge bg-warning">${enPrestamo}</span></td>
-                    <td><strong class="${estadoClass}">${utilizacion}%</strong></td>
-                    <td>
-                        ${m.disponibles < 5 ? 
-                            '<span class="badge bg-danger">Stock Crítico</span>' : 
-                            '<span class="badge bg-success">Normal</span>'}
-                    </td>
-                </tr>
-            `;
-        }).join('');
-
+        inventario = await response.json();
     } catch (error) {
         console.error('Error cargando inventario:', error);
-        tablaInventario.innerHTML = `<tr><td colspan="6" class="text-center text-danger">Error al cargar inventario.</td></tr>`;
+        document.getElementById('tablaInventarioDetalle').innerHTML = `<tr><td colspan="6" class="text-center text-danger">Error al cargar inventario.</td></tr>`;
+        return;
     }
+
+    if (inventario.length === 0) {
+        document.getElementById('tablaInventarioDetalle').innerHTML = `<tr><td colspan="6" class="text-center text-muted">No hay materiales registrados</td></tr>`;
+        return;
+    }
+
+    // 2. ACTUALIZAR LAS TARJETAS (¡LA PARTE QUE FALTABA!)
+    inventario.forEach(item => {
+        let idDisp, idPrest, idProg;
+        // Buscamos los IDs correspondientes del HTML del Admin
+        if (item.nombre.includes('Tablet')) { idDisp = 'tabletsDisponibles'; idPrest = 'tabletsPrestadas'; idProg = 'progressTablets'; }
+        else if (item.nombre.includes('Notebook')) { idDisp = 'notebooksDisponibles'; idPrest = 'notebooksPrestadas'; idProg = 'progressNotebooks'; }
+        else if (item.nombre.includes('Libro')) { idDisp = 'librosDisponibles'; idPrest = 'librosPrestados'; idProg = 'progressLibros'; }
+        else if (item.nombre.includes('Deportivo')) { idDisp = 'deportivoDisponible'; idPrest = 'deportivoPrestado'; idProg = 'progressDeportivo'; }
+
+        if (idDisp) {
+            const prestados = item.total - item.disponibles;
+            const progreso = (item.total > 0) ? (item.disponibles / item.total) * 100 : 0;
+            
+            document.getElementById(idDisp).textContent = item.disponibles;
+            document.getElementById(idPrest).textContent = prestados;
+            document.getElementById(idProg).style.width = progreso + '%';
+        }
+    });
+
+    // 3. ACTUALIZAR LA TABLA (Esta parte ya la teníamos)
+    const tablaInventario = document.getElementById('tablaInventarioDetalle');
+    tablaInventario.innerHTML = inventario.map(m => {
+        const enPrestamo = m.total - m.disponibles;
+        const utilizacion = (m.total > 0) ? ((enPrestamo / m.total) * 100).toFixed(1) : 0;
+        const estadoClass = utilizacion > 70 ? 'text-danger' : utilizacion > 40 ? 'text-warning' : 'text-success';
+        
+        return `
+            <tr>
+                <td><strong>${m.nombre}</strong></td>
+                <td>${m.total}</td>
+                <td><span class="badge bg-success">${m.disponibles}</span></td>
+                <td><span class="badge bg-warning">${enPrestamo}</span></td>
+                <td><strong class="${estadoClass}">${utilizacion}%</strong></td>
+                <td>
+                    ${m.disponibles < 5 ? 
+                        '<span class="badge bg-danger">Stock Crítico</span>' : 
+                        '<span class="badge bg-success">Normal</span>'}
+                </td>
+            </tr>
+        `;
+    }).join('');
 }
 
 

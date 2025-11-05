@@ -167,12 +167,26 @@ app.delete('/api/usuarios/eliminar/:id', (req, res) => {
 });
 
 // --- ENDPOINT PARA OBTENER TODOS LOS PRÉSTAMOS (Pestaña "Préstamos") ---
+// --- ENDPOINT PARA OBTENER TODOS LOS PRÉSTAMOS (PARA EL ADMIN) ---
 app.get('/api/prestamos', (req, res) => {
     const sql = `
-        SELECT S.*, U.NOMBRE as NOMBRE_USUARIO, A.NOMBRE as NOMBRE_ALUMNO
+        SELECT 
+            S.ID_SOLICITUD,
+            A.NOMBRE as ALUMNO_NOMBRE,
+            A.APELLIDO as ALUMNO_APELLIDO,
+            M.NOMBRE as MATERIAL_NOMBRE,
+            T.NOMBRE_TIPO_MATERIAL,
+            DS.CANTIDAD_ENTREGADA as CANTIDAD,
+            S.FECHA_SOLICITUD,
+            S.FECHA_DEVOLUCION,
+            S.ESTADO,
+            U.USERNAME as ENCARGADO_USERNAME
         FROM SOLICITUDES S
-        JOIN USUARIOS U ON S.ID_USUARIO = U.ID_USUARIO
         JOIN ALUMNOS A ON S.ID_ALUMNO = A.ID_ALUMNO
+        JOIN DETALLE_SOLICITUD DS ON S.ID_SOLICITUD = DS.ID_SOLICITUD
+        JOIN MATERIALES M ON DS.ID_MATERIAL = M.ID_MATERIAL
+        JOIN TIPO_MATERIALES T ON M.ID_TIPO_MATERIAL = T.ID_TIPO_MATERIAL
+        JOIN USUARIOS U ON S.ID_USUARIO = U.ID_USUARIO
         ORDER BY S.FECHA_SOLICITUD DESC
     `;
     db.query(sql, (err, results) => {
@@ -338,6 +352,42 @@ app.post('/api/prestamos/crear', (req, res) => {
                 });
             });
         });
+    });
+});
+
+
+// ==========================================================
+// ENDPOINT PARA PRÉSTAMOS ACTIVOS (POR ENCARGADO)
+// ==========================================================
+app.get('/api/prestamos/activos/:id_usuario', (req, res) => {
+    const { id_usuario } = req.params;
+
+    const sql = `
+        SELECT 
+            S.ID_SOLICITUD,
+            A.NOMBRE as ALUMNO_NOMBRE,
+            A.APELLIDO as ALUMNO_APELLIDO,
+            A.CURSO,
+            M.NOMBRE as MATERIAL_NOMBRE,
+            T.NOMBRE_TIPO_MATERIAL,
+            DS.CANTIDAD_ENTREGADA as CANTIDAD,
+            S.FECHA_SOLICITUD,
+            S.FECHA_DEVOLUCION
+        FROM SOLICITUDES S
+        JOIN ALUMNOS A ON S.ID_ALUMNO = A.ID_ALUMNO
+        JOIN DETALLE_SOLICITUD DS ON S.ID_SOLICITUD = DS.ID_SOLICITUD
+        JOIN MATERIALES M ON DS.ID_MATERIAL = M.ID_MATERIAL
+        JOIN TIPO_MATERIALES T ON M.ID_TIPO_MATERIAL = T.ID_TIPO_MATERIAL
+        WHERE S.ESTADO = 1 AND S.ID_USUARIO = ?
+        ORDER BY S.FECHA_DEVOLUCION ASC
+    `;
+
+    db.query(sql, [id_usuario], (err, results) => {
+        if (err) {
+            console.error(err);
+            return res.status(500).json({ message: 'Error al obtener préstamos activos' });
+        }
+        res.json(results);
     });
 });
 // ==========================================================
