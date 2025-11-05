@@ -1,6 +1,13 @@
-// dashboard-admin.js
+// dashboard-admin.js - VERSIÓN CONECTADA A BASE DE DATOS
 
-// ========== VERIFICACIÓN DE SESIÓN ==========
+// ==========================================================
+// DEFINIMOS LA URL DE NUESTRA API
+// ==========================================================
+const API_URL = 'http://localhost:3000/api';
+
+// ==========================================================
+// VERIFICACIÓN DE SESIÓN (Esto no cambia)
+// ==========================================================
 window.addEventListener('load', () => {
     const usuarioActual = sessionStorage.getItem('usuarioActual');
     const nombreUsuario = sessionStorage.getItem('nombreUsuario');
@@ -8,6 +15,13 @@ window.addEventListener('load', () => {
     
     if (!usuarioActual) {
         window.location.href = '../index.html';
+        return;
+    }
+    
+    // Solo el Admin puede estar aquí
+    if (rolUsuario !== 'Administrador') {
+        alert('Acceso denegado. No tienes permisos de Administrador.');
+        window.location.href = '../index.html'; // O al dashboard de encargado
         return;
     }
     
@@ -20,9 +34,13 @@ window.addEventListener('load', () => {
     
     // Cargar datos iniciales
     cargarDashboard();
+    cargarActividadReciente(); // Aún no conectada, pero la dejamos lista
+    cargarAlertas();
 });
 
-// ========== NAVEGACIÓN ==========
+// ==========================================================
+// NAVEGACIÓN Y UI (Esto no cambia)
+// ==========================================================
 const navLinks = document.querySelectorAll('.sidebar-nav .nav-link');
 const sections = document.querySelectorAll('.content-section');
 const pageTitle = document.getElementById('pageTitle');
@@ -30,21 +48,13 @@ const pageTitle = document.getElementById('pageTitle');
 navLinks.forEach(link => {
     link.addEventListener('click', (e) => {
         e.preventDefault();
-        
-        // Remover active de todos los links
         navLinks.forEach(l => l.classList.remove('active'));
-        
-        // Agregar active al link clickeado
         link.classList.add('active');
-        
-        // Ocultar todas las secciones
         sections.forEach(s => s.classList.remove('active'));
         
-        // Mostrar la sección correspondiente
         const sectionId = link.getAttribute('data-section');
         document.getElementById(`section-${sectionId}`).classList.add('active');
         
-        // Actualizar título
         const titles = {
             'dashboard': 'Dashboard',
             'usuarios': 'Gestión de Usuarios',
@@ -65,27 +75,22 @@ navLinks.forEach(link => {
     });
 });
 
-// ========== TOGGLE SIDEBAR ==========
 const toggleSidebar = document.getElementById('toggleSidebar');
 const sidebar = document.getElementById('sidebar');
 const mainContent = document.querySelector('.main-content');
-
 toggleSidebar.addEventListener('click', () => {
     sidebar.classList.toggle('collapsed');
     mainContent.classList.toggle('expanded');
 });
 
-// ========== CERRAR SESIÓN ==========
 document.getElementById('cerrarSesion').addEventListener('click', (e) => {
     e.preventDefault();
-    
     if (confirm('¿Está seguro que desea cerrar sesión?')) {
         sessionStorage.clear();
         window.location.href = '../index.html';
     }
 });
 
-// ========== ACTUALIZAR FECHA ==========
 function actualizarFecha() {
     const fecha = new Date();
     const opciones = { year: 'numeric', month: 'long', day: 'numeric' };
@@ -93,123 +98,67 @@ function actualizarFecha() {
         fecha.toLocaleDateString('es-CL', opciones);
 }
 
-// ========== DATOS SIMULADOS ==========
-let usuarios = JSON.parse(localStorage.getItem('usuarios')) || [];
-let prestamos = JSON.parse(localStorage.getItem('prestamos')) || [];
-let inventario = JSON.parse(localStorage.getItem('inventario')) || {
-    tablets: { total: 20, disponibles: 20, prestadas: 0 },
-    notebooks: { total: 100, disponibles: 100, prestadas: 0 },
-    libros: { total: 50, disponibles: 50, prestados: 0 },
-    deportivo: { total: 30, disponibles: 30, prestado: 0 }
-};
+// ==========================================================
+// CARGAR DATOS (¡Aquí reemplazamos localStorage por fetch!)
+// ==========================================================
 
-// Alumnos de prueba
-const alumnos = [
-    { id: 1, nombre: 'Diego Soto', rut: '12.345.678-9', curso: '8° A' },
-    { id: 2, nombre: 'María Castillo', rut: '23.456.789-0', curso: '7° B' },
-    { id: 3, nombre: 'Carlos Fuentes', rut: '34.567.890-1', curso: '6° C' },
-    { id: 4, nombre: 'Ana López', rut: '45.678.901-2', curso: '8° A' },
-    { id: 5, nombre: 'Pedro Ramírez', rut: '56.789.012-3', curso: '7° A' }
-];
+// --- Cargar Tarjetas (Stats) ---
+async function cargarDashboard() {
+    try {
+        const response = await fetch(`${API_URL}/dashboard/admin-stats`);
+        if (!response.ok) throw new Error('No se pudieron cargar las estadísticas');
+        
+        const stats = await response.json();
+        
+        document.getElementById('totalUsuarios').textContent = stats.totalUsuarios;
+        document.getElementById('prestamosActivos').textContent = stats.prestamosActivos;
+        document.getElementById('prestamosVencidos').textContent = stats.prestamosVencidos;
+        document.getElementById('totalMateriales').textContent = stats.totalMateriales || 170; // 170 es tu valor de respaldo
 
-// ========== CARGAR DASHBOARD ==========
-function cargarDashboard() {
-    // Actualizar estadísticas
-    document.getElementById('totalUsuarios').textContent = usuarios.length;
-    
-    const prestamosActivos = prestamos.filter(p => p.estado === 'activo').length;
-    document.getElementById('prestamosActivos').textContent = prestamosActivos;
-    
-    const prestamosVencidos = prestamos.filter(p => {
-        if (p.estado === 'activo') {
-            const fechaDevolucion = new Date(p.fechaDevolucion);
-            return fechaDevolucion < new Date();
-        }
-        return false;
-    }).length;
-    document.getElementById('prestamosVencidos').textContent = prestamosVencidos;
-    
-    // Cargar actividad reciente
-    cargarActividadReciente();
-    
-    // Cargar alertas
-    cargarAlertas();
-}
-
-// ========== ACTIVIDAD RECIENTE ==========
-function cargarActividadReciente() {
-    const actividadDiv = document.getElementById('actividadReciente');
-    
-    if (prestamos.length === 0) {
-        actividadDiv.innerHTML = '<p class="text-muted text-center">No hay actividad reciente</p>';
-        return;
+    } catch (error) {
+        console.error('Error cargando dashboard:', error);
     }
-    
-    // Obtener los últimos 5 préstamos
-    const ultimosPrestamos = prestamos.slice(-5).reverse();
-    
-    actividadDiv.innerHTML = ultimosPrestamos.map(p => `
-        <div class="activity-item">
-            <strong>${p.alumno}</strong> 
-            ${p.estado === 'devuelto' ? 'devolvió' : 'solicitó'} 
-            <strong>${p.material}</strong>
-            <br>
-            <span class="time">
-                <i class="fas fa-clock"></i> ${formatearFecha(p.fechaPrestamo)}
-            </span>
-        </div>
-    `).join('');
 }
 
-// ========== ALERTAS ==========
-function cargarAlertas() {
+// --- Cargar Alertas ---
+async function cargarAlertas() {
     const alertasDiv = document.getElementById('alertasSistema');
-    const alertas = [];
-    
-    // Alertas de inventario bajo
-    if (inventario.tablets.disponibles < 5) {
-        alertas.push({
-            tipo: 'warning',
-            mensaje: `Stock bajo de Tablets: solo ${inventario.tablets.disponibles} disponibles`
-        });
-    }
-    
-    if (inventario.notebooks.disponibles < 20) {
-        alertas.push({
-            tipo: 'warning',
-            mensaje: `Stock bajo de Notebooks: solo ${inventario.notebooks.disponibles} disponibles`
-        });
-    }
-    
-    // Alertas de préstamos vencidos
-    const vencidos = prestamos.filter(p => {
-        if (p.estado === 'activo') {
-            const fechaDevolucion = new Date(p.fechaDevolucion);
-            return fechaDevolucion < new Date();
+    try {
+        const response = await fetch(`${API_URL}/alertas`);
+        if (!response.ok) throw new Error('No se pudieron cargar las alertas');
+        
+        const alertas = await response.json();
+        
+        if (alertas.length === 0) {
+            alertasDiv.innerHTML = '<p class="text-muted text-center">No hay alertas</p>';
+            return;
         }
-        return false;
-    });
-    
-    if (vencidos.length > 0) {
-        alertas.push({
-            tipo: 'danger',
-            mensaje: `${vencidos.length} préstamo(s) vencido(s) requieren atención`
-        });
+        
+        alertasDiv.innerHTML = alertas.map(a => `
+            <div class="alert-item alert-warning">
+                <i class="fas fa-exclamation-triangle"></i> 
+                Stock bajo de ${a.nombre}: solo ${a.disponibles} disponibles
+            </div>
+        `).join('');
+
+    } catch (error) {
+        console.error('Error cargando alertas:', error);
+        alertasDiv.innerHTML = '<p class="text-danger text-center">No se pudieron cargar las alertas</p>';
     }
-    
-    if (alertas.length === 0) {
-        alertasDiv.innerHTML = '<p class="text-muted text-center">No hay alertas</p>';
-        return;
-    }
-    
-    alertasDiv.innerHTML = alertas.map(a => `
-        <div class="alert-item alert-${a.tipo}">
-            <i class="fas fa-exclamation-triangle"></i> ${a.mensaje}
-        </div>
-    `).join('');
 }
 
-// ========== GESTIÓN DE USUARIOS ==========
+// --- Cargar Actividad Reciente (Pestaña Préstamos) ---
+async function cargarActividadReciente() {
+    // Esta la dejaremos pendiente, por ahora un placeholder
+    const actividadDiv = document.getElementById('actividadReciente');
+    actividadDiv.innerHTML = '<p class="text-muted text-center">No hay actividad reciente</p>';
+    // Para conectarla, tendrías que llamar a /api/prestamos y mostrar los 5 últimos
+}
+
+
+// ==========================================================
+// GESTIÓN DE USUARIOS (¡Conectado!)
+// ==========================================================
 const btnMostrarFormulario = document.getElementById('btnMostrarFormulario');
 const formularioUsuario = document.getElementById('formularioUsuario');
 const btnCancelarFormulario = document.getElementById('btnCancelarFormulario');
@@ -226,7 +175,8 @@ btnCancelarFormulario.addEventListener('click', () => {
     formAgregarUsuario.reset();
 });
 
-formAgregarUsuario.addEventListener('submit', (e) => {
+// --- ENVIAR FORMULARIO DE NUEVO USUARIO ---
+formAgregarUsuario.addEventListener('submit', async (e) => {
     e.preventDefault();
     
     const password = document.getElementById('passwordNuevo').value;
@@ -238,7 +188,6 @@ formAgregarUsuario.addEventListener('submit', (e) => {
     }
     
     const nuevoUsuario = {
-        id: Date.now(),
         nombre: document.getElementById('nombreCompleto').value,
         rut: document.getElementById('rut').value,
         email: document.getElementById('email').value,
@@ -247,209 +196,221 @@ formAgregarUsuario.addEventListener('submit', (e) => {
         username: document.getElementById('username').value,
         password: password,
         activo: document.getElementById('usuarioActivo').checked,
-        fechaCreacion: new Date().toISOString()
     };
-    
-    // Verificar si el usuario ya existe
-    if (usuarios.some(u => u.username === nuevoUsuario.username)) {
-        alert('El nombre de usuario ya existe');
-        return;
+
+    try {
+        const response = await fetch(`${API_URL}/usuarios/crear`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(nuevoUsuario)
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            throw new Error(data.message || 'Error al crear usuario');
+        }
+
+        alert('Usuario creado exitosamente');
+        formAgregarUsuario.reset();
+        formularioUsuario.style.display = 'none';
+        btnMostrarFormulario.style.display = 'block';
+        
+        cargarUsuarios(); // Recargar la tabla
+        cargarDashboard(); // Actualizar el contador de usuarios
+
+    } catch (error) {
+        console.error('Error al crear usuario:', error);
+        alert(`Error: ${error.message}`);
     }
-    
-    usuarios.push(nuevoUsuario);
-    localStorage.setItem('usuarios', JSON.stringify(usuarios));
-    
-    alert('Usuario creado exitosamente');
-    
-    formAgregarUsuario.reset();
-    formularioUsuario.style.display = 'none';
-    btnMostrarFormulario.style.display = 'block';
-    
-    cargarUsuarios();
-    cargarDashboard();
 });
 
-// ========== CARGAR USUARIOS EN TABLA ==========
-function cargarUsuarios() {
+// --- CARGAR TABLA DE USUARIOS ---
+async function cargarUsuarios() {
     const tablaUsuarios = document.getElementById('tablaUsuarios');
-    
-    if (usuarios.length === 0) {
-        tablaUsuarios.innerHTML = `
-            <tr>
-                <td colspan="7" class="text-center text-muted">No hay usuarios registrados</td>
-            </tr>
-        `;
-        return;
-    }
-    
-    tablaUsuarios.innerHTML = usuarios.map((usuario, index) => `
-        <tr>
-            <td>${index + 1}</td>
-            <td>${usuario.nombre}</td>
-            <td>${usuario.username}</td>
-            <td><span class="badge bg-primary">${usuario.rol}</span></td>
-            <td>${usuario.email}</td>
-            <td>
-                <span class="badge ${usuario.activo ? 'bg-success' : 'bg-secondary'}">
-                    ${usuario.activo ? 'Activo' : 'Inactivo'}
-                </span>
-            </td>
-            <td>
-                <button class="btn btn-sm btn-warning" onclick="editarUsuario(${usuario.id})">
-                    <i class="fas fa-edit"></i>
-                </button>
-                <button class="btn btn-sm btn-danger" onclick="eliminarUsuario(${usuario.id})">
-                    <i class="fas fa-trash"></i>
-                </button>
-            </td>
-        </tr>
-    `).join('');
-}
-
-// ========== ELIMINAR USUARIO ==========
-function eliminarUsuario(id) {
-    if (confirm('¿Está seguro de eliminar este usuario?')) {
-        usuarios = usuarios.filter(u => u.id !== id);
-        localStorage.setItem('usuarios', JSON.stringify(usuarios));
-        cargarUsuarios();
-        cargarDashboard();
-        alert('Usuario eliminado exitosamente');
-    }
-}
-
-// ========== CARGAR PRÉSTAMOS ==========
-function cargarPrestamos() {
-    const tablaPrestamos = document.getElementById('tablaPrestamos');
-    
-    if (prestamos.length === 0) {
-        tablaPrestamos.innerHTML = `
-            <tr>
-                <td colspan="8" class="text-center text-muted">No hay préstamos registrados</td>
-            </tr>
-        `;
-        return;
-    }
-    
-    tablaPrestamos.innerHTML = prestamos.map((prestamo, index) => {
-        const estadoBadge = prestamo.estado === 'activo' ? 'bg-success' : 
-                           prestamo.estado === 'devuelto' ? 'bg-secondary' : 'bg-danger';
+    try {
+        const response = await fetch(`${API_URL}/usuarios`);
+        if (!response.ok) throw new Error('No se pudieron cargar los usuarios');
         
-        return `
+        const usuarios = await response.json();
+        
+        if (usuarios.length === 0) {
+            tablaUsuarios.innerHTML = `<tr><td colspan="7" class="text-center text-muted">No hay usuarios registrados</td></tr>`;
+            return;
+        }
+        
+        tablaUsuarios.innerHTML = usuarios.map((usuario, index) => `
             <tr>
-                <td>${index + 1}</td>
-                <td>${prestamo.alumno}</td>
-                <td>${prestamo.material}</td>
-                <td>${prestamo.cantidad}</td>
-                <td>${formatearFecha(prestamo.fechaPrestamo)}</td>
-                <td>${prestamo.fechaDevolucionReal || formatearFecha(prestamo.fechaDevolucion)}</td>
-                <td><span class="badge ${estadoBadge}">${prestamo.estado}</span></td>
+                <td>${usuario.ID_USUARIO}</td>
+                <td>${usuario.NOMBRE} ${usuario.APELLIDO || ''}</td>
+                <td>${usuario.USERNAME}</td>
+                <td><span class="badge bg-primary">${usuario.NOMBRE_ROL}</span></td>
+                <td>${usuario.EMAIL}</td>
                 <td>
-                    ${prestamo.estado === 'activo' ? `
-                        <button class="btn btn-sm btn-success" onclick="devolverPrestamo(${prestamo.id})">
-                            <i class="fas fa-check"></i> Devolver
-                        </button>
-                    ` : ''}
+                    <span class="badge ${usuario.ESTADO ? 'bg-success' : 'bg-secondary'}">
+                        ${usuario.ESTADO ? 'Activo' : 'Inactivo'}
+                    </span>
+                </td>
+                <td>
+                    <button class="btn btn-sm btn-warning" onclick="editarUsuario(${usuario.ID_USUARIO})">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    <button class="btn btn-sm btn-danger" onclick="eliminarUsuario(${usuario.ID_USUARIO})">
+                        <i class="fas fa-trash"></i>
+                    </button>
                 </td>
             </tr>
-        `;
-    }).join('');
+        `).join('');
+
+    } catch (error) {
+        console.error('Error cargando usuarios:', error);
+        tablaUsuarios.innerHTML = `<tr><td colspan="7" class="text-center text-danger">Error al cargar usuarios.</td></tr>`;
+    }
 }
 
-// ========== DEVOLVER PRÉSTAMO ==========
-function devolverPrestamo(id) {
-    if (confirm('¿Confirmar devolución del material?')) {
-        const prestamo = prestamos.find(p => p.id === id);
-        if (prestamo) {
-            prestamo.estado = 'devuelto';
-            prestamo.fechaDevolucionReal = new Date().toLocaleString('es-CL');
-            
-            // Actualizar inventario
-            const materialKey = prestamo.material.toLowerCase().replace(' ', '');
-            if (inventario[materialKey]) {
-                inventario[materialKey].disponibles += prestamo.cantidad;
-                inventario[materialKey].prestadas = Math.max(0, inventario[materialKey].prestadas - prestamo.cantidad);
+// --- ELIMINAR USUARIO ---
+async function eliminarUsuario(id) {
+    // No permitimos borrar el usuario admin (ID 1)
+    if (id === 1) {
+        alert('No se puede eliminar al usuario Administrador principal.');
+        return;
+    }
+    
+    if (confirm('¿Está seguro de eliminar este usuario? Esta acción es irreversible.')) {
+        try {
+            const response = await fetch(`${API_URL}/usuarios/eliminar/${id}`, {
+                method: 'DELETE'
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.message || 'Error al eliminar usuario');
             }
-            
-            localStorage.setItem('prestamos', JSON.stringify(prestamos));
-            localStorage.setItem('inventario', JSON.stringify(inventario));
-            
-            cargarPrestamos();
-            actualizarInventario();
-            cargarDashboard();
-            
-            alert('Material devuelto exitosamente');
+
+            alert('Usuario eliminado exitosamente');
+            cargarUsuarios(); // Recargar la tabla
+            cargarDashboard(); // Actualizar stats
+
+        } catch (error) {
+            console.error('Error al eliminar usuario:', error);
+            alert(`Error: ${error.message}`);
         }
     }
 }
 
-// ========== ACTUALIZAR INVENTARIO ==========
-function actualizarInventario() {
-    // Actualizar tarjetas
-    document.getElementById('tabletsDisponibles').textContent = inventario.tablets.disponibles;
-    document.getElementById('tabletsPrestadas').textContent = inventario.tablets.prestadas;
-    
-    document.getElementById('notebooksDisponibles').textContent = inventario.notebooks.disponibles;
-    document.getElementById('notebooksPrestadas').textContent = inventario.notebooks.prestadas;
-    
-    document.getElementById('librosDisponibles').textContent = inventario.libros.disponibles;
-    document.getElementById('librosPrestados').textContent = inventario.libros.prestados;
-    
-    document.getElementById('deportivoDisponible').textContent = inventario.deportivo.disponibles;
-    document.getElementById('deportivoPrestado').textContent = inventario.deportivo.prestado;
-    
-    // Actualizar barras de progreso
-    const progressTablets = (inventario.tablets.disponibles / inventario.tablets.total) * 100;
-    document.getElementById('progressTablets').style.width = progressTablets + '%';
-    
-    const progressNotebooks = (inventario.notebooks.disponibles / inventario.notebooks.total) * 100;
-    document.getElementById('progressNotebooks').style.width = progressNotebooks + '%';
-    
-    const progressLibros = (inventario.libros.disponibles / inventario.libros.total) * 100;
-    document.getElementById('progressLibros').style.width = progressLibros + '%';
-    
-    const progressDeportivo = (inventario.deportivo.disponibles / inventario.deportivo.total) * 100;
-    document.getElementById('progressDeportivo').style.width = progressDeportivo + '%';
-    
-    // Actualizar tabla de detalle
-    actualizarTablaInventario();
+// --- EDITAR USUARIO (Función de ejemplo, no conectada) ---
+function editarUsuario(id) {
+    alert(`Función "Editar" aún no implementada. Se editaría el usuario con ID: ${id}`);
+    // Para implementarla:
+    // 1. Harías un fetch a /api/usuarios/${id} para obtener sus datos.
+    // 2. Llenarías el formulario con esos datos.
+    // 3. Cambiarías el botón "Guardar" por "Actualizar".
+    // 4. El submit haría un fetch con método 'PUT' o 'PATCH' a /api/usuarios/actualizar/${id}
 }
 
-// ========== TABLA DE INVENTARIO DETALLE ==========
-function actualizarTablaInventario() {
-    const tabla = document.getElementById('tablaInventarioDetalle');
-    
-    const materiales = [
-        { nombre: 'Tablets', data: inventario.tablets, key: 'prestadas' },
-        { nombre: 'Notebooks', data: inventario.notebooks, key: 'prestadas' },
-        { nombre: 'Libros', data: inventario.libros, key: 'prestados' },
-        { nombre: 'Material Deportivo', data: inventario.deportivo, key: 'prestado' }
-    ];
-    
-    tabla.innerHTML = materiales.map(m => {
-        const enPrestamo = m.data[m.key];
-        const utilizacion = ((enPrestamo / m.data.total) * 100).toFixed(1);
-        const estadoClass = utilizacion > 70 ? 'text-danger' : utilizacion > 40 ? 'text-warning' : 'text-success';
+
+// ==========================================================
+// GESTIÓN DE PRÉSTAMOS (Conectada)
+// ==========================================================
+async function cargarPrestamos() {
+    const tablaPrestamos = document.getElementById('tablaPrestamos');
+    try {
+        const response = await fetch(`${API_URL}/prestamos`);
+        if (!response.ok) throw new Error('No se pudieron cargar los préstamos');
+
+        const prestamos = await response.json();
+
+        if (prestamos.length === 0) {
+            tablaPrestamos.innerHTML = `<tr><td colspan="8" class="text-center text-muted">No hay préstamos registrados</td></tr>`;
+            return;
+        }
+
+        tablaPrestamos.innerHTML = prestamos.map((p, index) => {
+            let estadoBadge = 'bg-secondary'; // Devuelto
+            let estadoTexto = 'Devuelto';
+            if (p.ESTADO === 1) { // Activo
+                if (new Date(p.FECHA_DEVOLUCION) < new Date()) {
+                    estadoBadge = 'bg-danger';
+                    estadoTexto = 'Vencido';
+                } else {
+                    estadoBadge = 'bg-success';
+                    estadoTexto = 'Activo';
+                }
+            }
+            
+            return `
+                <tr>
+                    <td>${p.ID_SOLICITUD}</td>
+                    <td>${p.NOMBRE_ALUMNO}</td>
+                    <td>(Material)</td> <td>(Cant)</td>
+                    <td>${formatearFecha(p.FECHA_SOLICITUD)}</td>
+                    <td>${formatearFecha(p.FECHA_DEVOLUCION)}</td>
+                    <td><span class="badge ${estadoBadge}">${estadoTexto}</span></td>
+                    <td>
+                        ${p.ESTADO === 1 ? `<button class="btn btn-sm btn-success">Devolver</button>` : ''}
+                    </td>
+                </tr>
+            `;
+        }).join('');
+
+    } catch (error) {
+        console.error('Error cargando préstamos:', error);
+        tablaPrestamos.innerHTML = `<tr><td colspan="8" class="text-center text-danger">Error al cargar préstamos.</td></tr>`;
+    }
+}
+
+
+// ==========================================================
+// GESTIÓN DE INVENTARIO (Conectada)
+// ==========================================================
+async function actualizarInventario() {
+    const tablaInventario = document.getElementById('tablaInventarioDetalle');
+    try {
+        const response = await fetch(`${API_URL}/inventario`);
+        if (!response.ok) throw new Error('No se pudo cargar el inventario');
         
-        return `
-            <tr>
-                <td><strong>${m.nombre}</strong></td>
-                <td>${m.data.total}</td>
-                <td><span class="badge bg-success">${m.data.disponibles}</span></td>
-                <td><span class="badge bg-warning">${enPrestamo}</span></td>
-                <td><strong class="${estadoClass}">${utilizacion}%</strong></td>
-                <td>
-                    ${m.data.disponibles < 5 ? 
-                        '<span class="badge bg-danger">Stock Crítico</span>' : 
-                        '<span class="badge bg-success">Normal</span>'}
-                </td>
-            </tr>
-        `;
-    }).join('');
+        const inventario = await response.json();
+
+        if (inventario.length === 0) {
+            tablaInventario.innerHTML = `<tr><td colspan="6" class="text-center text-muted">No hay materiales registrados</td></tr>`;
+            return;
+        }
+        
+        tablaInventario.innerHTML = inventario.map(m => {
+            const enPrestamo = m.total - m.disponibles;
+            const utilizacion = (m.total > 0) ? ((enPrestamo / m.total) * 100).toFixed(1) : 0;
+            const estadoClass = utilizacion > 70 ? 'text-danger' : utilizacion > 40 ? 'text-warning' : 'text-success';
+            
+            return `
+                <tr>
+                    <td><strong>${m.nombre}</strong></td>
+                    <td>${m.total}</td>
+                    <td><span class="badge bg-success">${m.disponibles}</span></td>
+                    <td><span class="badge bg-warning">${enPrestamo}</span></td>
+                    <td><strong class="${estadoClass}">${utilizacion}%</strong></td>
+                    <td>
+                        ${m.disponibles < 5 ? 
+                            '<span class="badge bg-danger">Stock Crítico</span>' : 
+                            '<span class="badge bg-success">Normal</span>'}
+                    </td>
+                </tr>
+            `;
+        }).join('');
+
+    } catch (error) {
+        console.error('Error cargando inventario:', error);
+        tablaInventario.innerHTML = `<tr><td colspan="6" class="text-center text-danger">Error al cargar inventario.</td></tr>`;
+    }
 }
 
-// ========== FORMATEAR FECHA ==========
-function formatearFecha(fecha) {
-    const date = new Date(fecha);
+
+// ==========================================================
+// UTILIDADES (Formatear Fecha)
+// ==========================================================
+function formatearFecha(fechaISO) {
+    if (!fechaISO) return 'N/A';
+    const date = new Date(fechaISO);
     return date.toLocaleString('es-CL', {
         day: '2-digit',
         month: '2-digit',
@@ -458,16 +419,3 @@ function formatearFecha(fecha) {
         minute: '2-digit'
     });
 }
-
-// ========== EXPORTAR REPORTES (SIMULADO) ==========
-document.getElementById('exportarExcel')?.addEventListener('click', () => {
-    alert('Funcionalidad de exportación a Excel en desarrollo');
-});
-
-document.getElementById('exportarPDF')?.addEventListener('click', () => {
-    alert('Funcionalidad de exportación a PDF en desarrollo');
-});
-
-document.getElementById('imprimirReporte')?.addEventListener('click', () => {
-    window.print();
-});
