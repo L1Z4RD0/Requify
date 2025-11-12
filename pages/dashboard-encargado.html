@@ -5,17 +5,13 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Requify - Dashboard Encargado</title>
     
-    <!-- Bootstrap CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     
-    <!-- Font Awesome -->
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
-    <!-- CSS personalizado -->
     <link rel="stylesheet" href="../css/dashboard.css">
 </head>
 <body>
-    <!-- Sidebar -->
     <div class="sidebar" id="sidebar">
         <div class="sidebar-header">
             <i class="fas fa-book-reader"></i>
@@ -57,9 +53,7 @@
         </div>
     </div>
 
-    <!-- Main Content -->
     <div class="main-content">
-        <!-- Header -->
         <header class="top-header">
             <button class="btn btn-link" id="toggleSidebar">
                 <i class="fas fa-bars"></i>
@@ -72,9 +66,7 @@
             </div>
         </header>
 
-        <!-- Dashboard Content -->
         <div class="content-area">
-            <!-- Sección: Dashboard -->
             <div id="section-dashboard" class="content-section active">
                 <div class="row g-4 mb-4">
                     <div class="col-md-4">
@@ -126,19 +118,14 @@
                                         <thead>
                                             <tr>
                                                 <th>Alumno</th>
-                                                <th>Material</th>
+                                                <th>Material (Cód.)</th>
                                                 <th>Fecha Devolución</th>
                                                 <th>Estado</th>
                                                 <th>Acción</th>
                                             </tr>
                                         </thead>
                                         <tbody id="tablaPendientes">
-                                            <tr>
-                                                <td colspan="5" class="text-center text-muted">
-                                                    No hay préstamos pendientes
-                                                </td>
-                                            </tr>
-                                        </tbody>
+                                            </tbody>
                                     </table>
                                 </div>
                             </div>
@@ -154,7 +141,7 @@
                                 <div class="material-disponible mb-3">
                                     <div class="d-flex justify-content-between align-items-center mb-2">
                                         <span><i class="fas fa-tablet-alt text-primary"></i> Tablets</span>
-                                        <strong id="tabletsDisp">20</strong>
+                                        <strong id="tabletsDisp">0</strong>
                                     </div>
                                     <div class="progress" style="height: 8px;">
                                         <div class="progress-bar bg-primary" id="progTablets" style="width: 100%"></div>
@@ -164,7 +151,7 @@
                                 <div class="material-disponible mb-3">
                                     <div class="d-flex justify-content-between align-items-center mb-2">
                                         <span><i class="fas fa-laptop text-success"></i> Notebooks</span>
-                                        <strong id="notebooksDisp">100</strong>
+                                        <strong id="notebooksDisp">0</strong>
                                     </div>
                                     <div class="progress" style="height: 8px;">
                                         <div class="progress-bar bg-success" id="progNotebooks" style="width: 100%"></div>
@@ -174,7 +161,7 @@
                                 <div class="material-disponible mb-3">
                                     <div class="d-flex justify-content-between align-items-center mb-2">
                                         <span><i class="fas fa-book text-info"></i> Libros</span>
-                                        <strong id="librosDisp">50</strong>
+                                        <strong id="librosDisp">0</strong>
                                     </div>
                                     <div class="progress" style="height: 8px;">
                                         <div class="progress-bar bg-info" id="progLibros" style="width: 100%"></div>
@@ -184,7 +171,7 @@
                                 <div class="material-disponible">
                                     <div class="d-flex justify-content-between align-items-center mb-2">
                                         <span><i class="fas fa-futbol text-warning"></i> Mat. Deportivo</span>
-                                        <strong id="deportivoDisp">30</strong>
+                                        <strong id="deportivoDisp">0</strong>
                                     </div>
                                     <div class="progress" style="height: 8px;">
                                         <div class="progress-bar bg-warning" id="progDeportivo" style="width: 100%"></div>
@@ -196,7 +183,6 @@
                 </div>
             </div>
 
-            <!-- Sección: Nuevo Préstamo -->
             <div id="section-nuevo-prestamo" class="content-section">
                 <div class="card">
                     <div class="card-header">
@@ -221,16 +207,16 @@
                                 </div>
 
                                 <div class="col-md-6">
-                                    <label class="form-label">Categoría de Material *</label>
+                                    <label class="form-label">Producto *</label>
                                     <select class="form-select" id="materialSelect" required>
-                                        <option value="">-- Seleccione una categoría... --</option>
+                                        <option value="">-- Seleccione un producto... --</option>
                                     </select>
                                 </div>
 
                                 <div class="col-md-6">
                                     <label class="form-label">Ítem Específico (Código) *</label>
                                     <select class="form-select" id="itemSelect" required disabled>
-                                        <option value="">-- Primero seleccione una categoría --</option>
+                                        <option value="">-- Primero seleccione un producto --</option>
                                     </select>
                                     <small class="text-muted" id="itemDisponiblesInfo"></small>
                                 </div>
@@ -283,33 +269,13 @@
                 </div>
             </div>
 
-            <!-- Sección: Préstamos Activos -->
             <div id="section-prestamos-activos" class="content-section">
                 <div class="card mb-3">
                     <div class="card-header">
                         <h5><i class="fas fa-search"></i> Buscar Préstamo Activo</h5>
                     </div>
                     <div class="card-body">
-                        <div class="row g-3">
-                            <div class="col-md-6">
-                                <input type="text" class="form-control" id="buscarActivoInput" placeholder="Buscar por alumno o material...">
-                            </div>
-                            <div class="col-md-4">
-                                <select class="form-select" id="filtroMaterialActivo">
-                                    <option value="">Todos los materiales</option>
-                                    <option value="Tablet">Tablets</option>
-                                    <option value="Notebook">Notebooks</option>
-                                    <option value="Libro">Libros</option>
-                                    <option value="Material Deportivo">Material Deportivo</option>
-                                </select>
-                            </div>
-                            <div class="col-md-2">
-                                <button class="btn btn-primary w-100" id="btnBuscarActivo">
-                                    <i class="fas fa-search"></i> Buscar
-                                </button>
-                            </div>
-                        </div>
-                    </div>
+                         </div>
                 </div>
 
                 <div class="card">
@@ -325,7 +291,7 @@
                                         <th>ID</th>
                                         <th>Alumno</th>
                                         <th>Material</th>
-                                        <th>Cantidad</th>
+                                        <th>Cód. Ítem</th>
                                         <th>Fecha Préstamo</th>
                                         <th>Fecha Devolución</th>
                                         <th>Días Restantes</th>
@@ -333,52 +299,20 @@
                                     </tr>
                                 </thead>
                                 <tbody id="tablaActivosCompleta">
-                                    <tr>
-                                        <td colspan="8" class="text-center text-muted">
-                                            No hay préstamos activos
-                                        </td>
-                                    </tr>
-                                </tbody>
+                                    </tbody>
                             </table>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Sección: Historial -->
             <div id="section-historial" class="content-section">
                 <div class="card mb-3">
                     <div class="card-header">
                         <h5><i class="fas fa-filter"></i> Filtrar Historial</h5>
                     </div>
-                    <div class="card-body">
-                        <div class="row g-3">
-                            <div class="col-md-3">
-                                <label class="form-label">Desde</label>
-                                <input type="date" class="form-control" id="fechaDesde">
-                            </div>
-                            <div class="col-md-3">
-                                <label class="form-label">Hasta</label>
-                                <input type="date" class="form-control" id="fechaHasta">
-                            </div>
-                            <div class="col-md-3">
-                                <label class="form-label">Material</label>
-                                <select class="form-select" id="filtroMaterialHistorial">
-                                    <option value="">Todos</option>
-                                    <option value="Tablet">Tablets</option>
-                                    <option value="Notebook">Notebooks</option>
-                                    <option value="Libro">Libros</option>
-                                    <option value="Material Deportivo">Material Deportivo</option>
-                                </select>
-                            </div>
-                            <div class="col-md-3">
-                                <label class="form-label">&nbsp;</label>
-                                <button class="btn btn-primary w-100" id="btnFiltrarHistorial">
-                                    <i class="fas fa-filter"></i> Filtrar
-                                </button>
-                            </div>
+                     <div class="card-body">
                         </div>
-                    </div>
                 </div>
 
                 <div class="card">
@@ -393,7 +327,7 @@
                                         <th>ID</th>
                                         <th>Alumno</th>
                                         <th>Material</th>
-                                        <th>Cantidad</th>
+                                        <th>Cód. Ítem</th>
                                         <th>Fecha Préstamo</th>
                                         <th>Fecha Devolución</th>
                                         <th>Estado</th>
@@ -401,19 +335,13 @@
                                     </tr>
                                 </thead>
                                 <tbody id="tablaHistorial">
-                                    <tr>
-                                        <td colspan="8" class="text-center text-muted">
-                                            No hay historial de préstamos
-                                        </td>
-                                    </tr>
-                                </tbody>
+                                    </tbody>
                             </table>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <!-- Sección: Inventario (Solo lectura) -->
             <div id="section-inventario" class="content-section">
                 <div class="row g-4">
                     <div class="col-md-3">
@@ -421,7 +349,7 @@
                             <div class="card-body text-center">
                                 <i class="fas fa-tablet-alt fa-3x text-primary mb-3"></i>
                                 <h5>Tablets</h5>
-                                <h2 class="text-primary"><span id="tabletsInvDisp">20</span> / 20</h2>
+                                <h2 class="text-primary"><span id="tabletsInvDisp">0</span> / 0</h2>
                                 <div class="progress mb-2" style="height: 10px;">
                                     <div class="progress-bar bg-primary" id="progressInvTablets" style="width: 100%"></div>
                                 </div>
@@ -435,7 +363,7 @@
                             <div class="card-body text-center">
                                 <i class="fas fa-laptop fa-3x text-success mb-3"></i>
                                 <h5>Notebooks</h5>
-                                <h2 class="text-success"><span id="notebooksInvDisp">100</span> / 100</h2>
+                                <h2 class="text-success"><span id="notebooksInvDisp">0</span> / 0</h2>
                                 <div class="progress mb-2" style="height: 10px;">
                                     <div class="progress-bar bg-success" id="progressInvNotebooks" style="width: 100%"></div>
                                 </div>
@@ -449,7 +377,7 @@
                             <div class="card-body text-center">
                                 <i class="fas fa-book fa-3x text-info mb-3"></i>
                                 <h5>Libros</h5>
-                                <h2 class="text-info"><span id="librosInvDisp">50</span> / 50</h2>
+                                <h2 class="text-info"><span id="librosInvDisp">0</span> / 0</h2>
                                 <div class="progress mb-2" style="height: 10px;">
                                     <div class="progress-bar bg-info" id="progressInvLibros" style="width: 100%"></div>
                                 </div>
@@ -463,7 +391,7 @@
                             <div class="card-body text-center">
                                 <i class="fas fa-futbol fa-3x text-warning mb-3"></i>
                                 <h5>Material Deportivo</h5>
-                                <h2 class="text-warning"><span id="deportivoInvDisp">30</span> / 30</h2>
+                                <h2 class="text-warning"><span id="deportivoInvDisp">0</span> / 0</h2>
                                 <div class="progress mb-2" style="height: 10px;">
                                     <div class="progress-bar bg-warning" id="progressInvDeportivo" style="width: 100%"></div>
                                 </div>
@@ -472,24 +400,10 @@
                         </div>
                     </div>
                 </div>
-
-                <div class="card mt-4">
-                    <div class="card-header">
-                        <h5><i class="fas fa-info-circle"></i> Estado del Inventario</h5>
-                    </div>
-                    <div class="card-body">
-                        <div class="alert alert-info">
-                            <i class="fas fa-lightbulb"></i> 
-                            <strong>Información:</strong> Esta vista muestra el estado actual del inventario en tiempo real. 
-                            Los materiales disponibles se actualizan automáticamente con cada préstamo y devolución.
-                        </div>
-                    </div>
                 </div>
-            </div>
         </div>
     </div>
 
-    <!-- Modal para Devolver Préstamo -->
     <div class="modal fade" id="modalDevolver" tabindex="-1">
         <div class="modal-dialog">
             <div class="modal-content">
@@ -531,10 +445,8 @@
         </div>
     </div>
 
-    <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     
-    <!-- Script personalizado -->
     <script src="../js/dashboard-encargado.js"></script>
 </body>
 </html>

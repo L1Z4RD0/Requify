@@ -4,6 +4,7 @@
 const express = require('express');
 const mysql = require('mysql2');
 const cors = require('cors');
+const bcrypt = require('bcrypt'); 
 
 // ==========================================================
 // 2. CONFIGURACIÓN
@@ -11,91 +12,127 @@ const cors = require('cors');
 const app = express();
 app.use(cors());
 app.use(express.json());
+const saltRounds = 10; // (Para bcrypt)
 
 // ==========================================================
-// 3. CONEXIÓN A LA BASE DE DATOS (¡LLENA TU CONTRASEÑA!)
+// 3. CONEXIÓN A LA BASE DE DATOS 
 // ==========================================================
 const db = mysql.createConnection({
     host: '127.0.0.1',
     port: '3306',
     user: 'root',
-    password: 'BB21JhonWick', // <-- ¡CAMBIA ESTO!
+    password: 'BB21JhonWick', 
     database: 'Requify_Demo',
     multipleStatements: true
 });
 
 db.connect(err => {
     if (err) { console.error('Error al conectar a la base de datos:', err); return; }
-    console.log('¡Conectado exitosamente a la base de datos Requify_Demo v3.0 (Final)!');
+    console.log('¡Conectado exitosamente a la base de datos Requify_Demo v3.1 (Bcrypt)!');
 });
 
 // ==========================================================
-// 4. ENDPOINTS DE LOGIN Y GESTIÓN DE USUARIOS (Admin)
+// 4. ENDPOINTS DE LOGIN Y GESTIÓN DE USUARIOS 
 // ==========================================================
 
-// --- LOGIN (Con ID de usuario) ---
+// --- LOGIN (¡ACTUALIZADO CON BCRYPT!) ---
 app.post('/login', (req, res) => {
     const { username, password } = req.body;
+
+    // 1. Buscar al usuario SOLO por username
     const sql = `
-        SELECT U.ID_USUARIO, U.USERNAME, U.NOMBRE, R.NOMBRE_ROL 
+        SELECT U.ID_USUARIO, U.USERNAME, U.NOMBRE, U.PASSWORD, R.NOMBRE_ROL 
         FROM USUARIOS U 
         JOIN ROLES R ON U.ID_ROL = R.ID_ROL 
-        WHERE U.USERNAME = ? AND U.PASSWORD = ? AND U.ESTADO = 1
+        WHERE U.USERNAME = ? AND U.ESTADO = 1
     `;
-    db.query(sql, [username, password], (err, results) => {
+    
+    db.query(sql, [username], async (err, results) => {
         if (err) { return res.status(500).json({ message: 'Error en el servidor' }); }
-        if (results.length > 0) {
-            const user = results[0];
-            const redirect = user.NOMBRE_ROL === 'Administrador' ? 'pages/dashboard-admin.html' : 'pages/dashboard-encargado.html';
-            res.json({
-                success: true,
-                id: user.ID_USUARIO, // ¡Importante para el Encargado!
-                username: user.USERNAME,
-                nombre: user.NOMBRE,
-                rol: user.NOMBRE_ROL,
-                redirect: redirect
-            });
-        } else {
+
+        if (results.length === 0) {
+            // Usuario no encontrado
+            return res.status(401).json({ success: false, message: 'Usuario o contraseña incorrectos' });
+        }
+
+        const user = results[0];
+        const hashedPassword = user.PASSWORD;
+
+        // 2. Comparar la contraseña (Punto 4)
+        try {
+            const match = await bcrypt.compare(password, hashedPassword);
+            
+            if (match) {
+                // ¡Éxito con Bcrypt! (Para usuarios nuevos)
+                return enviarRespuestaLogin(res, user);
+            }
+
+            // 3. Lógica de "Amnistía" (para usuarios viejos como 'admin')
+            // Si bcrypt falla, intentamos una comparación de texto plano
+            if (password === hashedPassword) {
+                // ¡Éxito con Texto Plano! (Para 'admin')
+                return enviarRespuestaLogin(res, user);
+            }
+
+            // Si ambas fallan, la contraseña es incorrecta
             res.status(401).json({ success: false, message: 'Usuario o contraseña incorrectos' });
+
+        } catch (bcryptError) {
+            console.error('Error en bcrypt:', bcryptError);
+            res.status(500).json({ message: 'Error de seguridad en el servidor' });
         }
     });
 });
 
-// --- OBTENER TODOS LOS USUARIOS (Admin) ---
-app.get('/api/usuarios', (req, res) => {
-    const sql = `
-        SELECT U.ID_USUARIO, U.NOMBRE, U.APELLIDO, U.USERNAME, U.EMAIL, R.NOMBRE_ROL, U.ESTADO 
-        FROM USUARIOS U 
-        JOIN ROLES R ON U.ID_ROL = R.ID_ROL
-    `;
-    db.query(sql, (err, results) => {
-        if (err) { return res.status(500).json({ message: 'Error en el servidor' }); }
-        res.json(results);
+// (Función helper para no repetir código)
+function enviarRespuestaLogin(res, user) {
+    const redirect = user.NOMBRE_ROL === 'Administrador' ? 'pages/dashboard-admin.html' : 'pages/dashboard-encargado.html';
+    res.json({
+        success: true,
+        id: user.ID_USUARIO,
+        username: user.USERNAME,
+        nombre: user.NOMBRE,
+        rol: user.NOMBRE_ROL,
+        redirect: redirect
     });
-});
+}
 
-// --- CREAR USUARIO (Admin) ---
+
+// --- CREAR USUARIO (¡ACTUALIZADO CON BCRYPT!) ---
 app.post('/api/usuarios/crear', (req, res) => {
     const { nombre, rut, email, telefono, rol, username, password, activo } = req.body;
-    db.query('SELECT ID_ROL FROM ROLES WHERE NOMBRE_ROL = ?', [rol], (err, results) => {
-        if (err || results.length === 0) { return res.status(500).json({ message: 'Error al buscar el rol' }); }
-        const idRol = results[0].ID_ROL;
-        const estadoNum = activo ? 1 : 0;
-        const sql = `
-            INSERT INTO USUARIOS (ID_ROL, USERNAME, NOMBRE, EMAIL, PASSWORD, ESTADO, FECHA_ALTA, APELLIDO)
-            VALUES (?, ?, ?, ?, ?, ?, NOW(), ?)
-        `;
-        db.query(sql, [idRol, username, nombre, email, password, estadoNum, ''], (err, result) => {
-            if (err) {
-                if (err.code === 'ER_DUP_ENTRY') { return res.status(409).json({ message: 'El nombre de usuario ya existe' }); }
-                return res.status(500).json({ message: 'Error al crear el usuario' });
-            }
-            res.status(201).json({ success: true, message: 'Usuario creado exitosamente', id: result.insertId });
+    
+    // 1. Encriptar la contraseña (Punto 4)
+    bcrypt.hash(password, saltRounds, (err, hashedPassword) => {
+        if (err) {
+            console.error('Error al hashear:', err);
+            return res.status(500).json({ message: 'Error de seguridad al crear usuario' });
+        }
+
+        // 2. Buscar el ID del Rol
+        db.query('SELECT ID_ROL FROM ROLES WHERE NOMBRE_ROL = ?', [rol], (err, results) => {
+            if (err || results.length === 0) { return res.status(500).json({ message: 'Error al buscar el rol' }); }
+            
+            const idRol = results[0].ID_ROL;
+            const estadoNum = activo ? 1 : 0;
+
+            // 3. Insertar el usuario con la contraseña ENCRIPTADA
+            const sql = `
+                INSERT INTO USUARIOS (ID_ROL, USERNAME, NOMBRE, EMAIL, PASSWORD, ESTADO, FECHA_ALTA, APELLIDO)
+                VALUES (?, ?, ?, ?, ?, ?, NOW(), ?)
+            `;
+            db.query(sql, [idRol, username, nombre, email, hashedPassword, estadoNum, ''], (err, result) => {
+                if (err) {
+                    if (err.code === 'ER_DUP_ENTRY') { return res.status(409).json({ message: 'El nombre de usuario ya existe' }); }
+                    return res.status(500).json({ message: 'Error al crear el usuario' });
+                }
+                res.status(201).json({ success: true, message: 'Usuario creado exitosamente', id: result.insertId });
+            });
         });
     });
 });
 
-// --- ELIMINAR USUARIO (Admin) ---
+// --- ELIMINAR USUARIO (Admin) (Sin cambios) ---
 app.delete('/api/usuarios/eliminar/:id', (req, res) => {
     const { id } = req.params;
     const sql = 'DELETE FROM USUARIOS WHERE ID_USUARIO = ?';
@@ -108,34 +145,28 @@ app.delete('/api/usuarios/eliminar/:id', (req, res) => {
 
 
 // ==========================================================
-// 5. ENDPOINTS DE GESTIÓN DE INVENTARIO (Admin)
+// 5. ENDPOINTS DE GESTIÓN DE INVENTARIO (Admin) (Sin cambios)
 // ==========================================================
 
-// --- ¡NUEVO! OBTENER LAS CATEGORÍAS (TIPO_MATERIALES) ---
+// --- OBTENER LAS CATEGORÍAS (TIPO_MATERIALES) ---
 app.get('/api/tipos-materiales', (req, res) => {
     const sql = 'SELECT * FROM TIPO_MATERIALES ORDER BY NOMBRE_TIPO_MATERIAL';
     db.query(sql, (err, results) => {
-        if (err) {
-            console.error(err);
-            return res.status(500).json({ message: 'Error al obtener tipos de materiales' });
-        }
+        if (err) { return res.status(500).json({ message: 'Error al obtener tipos de materiales' }); }
         res.json(results);
     });
 });
 
-// --- ¡NUEVO! OBTENER LAS UBICACIONES ---
+// --- OBTENER LAS UBICACIONES ---
 app.get('/api/ubicaciones', (req, res) => {
     const sql = 'SELECT * FROM UBICACIONES ORDER BY NOMBRE_UBICACION';
     db.query(sql, (err, results) => {
-        if (err) {
-            console.error(err);
-            return res.status(500).json({ message: 'Error al obtener ubicaciones' });
-        }
+        if (err) { return res.status(500).json({ message: 'Error al obtener ubicaciones' }); }
         res.json(results);
     });
 });
 
-// --- ¡NUEVO! CREAR UN NUEVO TIPO DE MATERIAL (ej: "iPad Air") ---
+// --- CREAR UN NUEVO TIPO DE MATERIAL (ej: "iPad Air") ---
 app.post('/api/materiales/crear', (req, res) => {
     const { id_tipo_material, nombre, descripcion, max_dias_prestamo } = req.body;
     const sql = `
@@ -144,18 +175,18 @@ app.post('/api/materiales/crear', (req, res) => {
     `;
     db.query(sql, [id_tipo_material, nombre, descripcion, max_dias_prestamo], (err, result) => {
         if (err) {
+            if (err.code === 'ER_DUP_ENTRY') { return res.status(409).json({ message: 'Ese nombre de material ya existe.' }); }
             console.error(err);
             return res.status(500).json({ message: 'Error al crear el material.' });
         }
-        res.status(201).json({ success: true, message: 'Nuevo tipo de material creado.', id: result.insertId });
+        res.status(201).json({ success: true, message: 'Nuevo tipo de producto creado.', id: result.insertId });
     });
 });
 
-// --- ¡NUEVO! AÑADIR ITEMS (Genera Códigos Automáticos) ---
+// --- AÑADIR ITEMS (Genera Códigos Automáticos) ---
 app.post('/api/items/crear', (req, res) => {
     const { id_material, cantidad, id_ubicacion, estado } = req.body;
     const estadoItem = estado ? estado : 'Disponible';
-
     db.beginTransaction(async (err) => {
         if (err) { throw err; }
         try {
@@ -168,21 +199,18 @@ app.post('/api/items/crear', (req, res) => {
             );
             if (rows.length === 0) { throw new Error('Categoría de material no encontrada.'); }
             const prefijo = rows[0].PREFIJO;
-
             const [maxRows] = await db.promise().query(
                 `SELECT CODIGO_PATRIMONIAL FROM ITEMS_INVENTARIO 
                  WHERE CODIGO_PATRIMONIAL LIKE ? 
                  ORDER BY ID_ITEM DESC LIMIT 1`, 
                 [`${prefijo}-%`]
             );
-            
             let numeroSiguiente = 1001;
             if (maxRows.length > 0) {
                 const ultimoCodigo = maxRows[0].CODIGO_PATRIMONIAL;
                 const ultimoNumero = parseInt(ultimoCodigo.split('-')[1]);
                 numeroSiguiente = ultimoNumero + 1;
             }
-
             const sqlInsert = `
                 INSERT INTO ITEMS_INVENTARIO (ID_MATERIAL, CODIGO_PATRIMONIAL, ESTADO, ID_UBICACION)
                 VALUES ?
@@ -192,11 +220,9 @@ app.post('/api/items/crear', (req, res) => {
                 const nuevoCodigo = `${prefijo}-${numeroSiguiente + i}`;
                 valores.push([id_material, nuevoCodigo, estadoItem, id_ubicacion]);
             }
-            
             await db.promise().query(sqlInsert, [valores]);
             await db.promise().commit();
             res.status(201).json({ success: true, message: `¡${cantidad} ítems agregados exitosamente!` });
-
         } catch (error) {
             await db.promise().rollback();
             console.error(error);
@@ -210,10 +236,10 @@ app.post('/api/items/crear', (req, res) => {
 });
 
 // ==========================================================
-// 6. ENDPOINTS DE LECTURA (Dashboard y Préstamos)
+// 6. ENDPOINTS DE LECTURA (Dashboard y Préstamos) (Sin cambios)
 // ==========================================================
 
-// --- OBTENER ALUMNOS (Encargado) ---
+// --- OBTENER ALUMNOS ---
 app.get('/api/alumnos', (req, res) => {
     const sql = 'SELECT ID_ALUMNO, RUT, NOMBRE, APELLIDO, CURSO FROM ALUMNOS ORDER BY NOMBRE';
     db.query(sql, (err, results) => {
@@ -222,7 +248,16 @@ app.get('/api/alumnos', (req, res) => {
     });
 });
 
-// --- OBTENER CATEGORÍAS DE MATERIAL (Encargado) ---
+// --- OBTENER ASIGNATURAS ---
+app.get('/api/asignaturas', (req, res) => {
+    const sql = 'SELECT * FROM ASIGNATURAS ORDER BY NOMBRE_ASIGNATURA';
+    db.query(sql, (err, results) => {
+        if (err) { return res.status(500).json({ message: 'Error al obtener asignaturas' }); }
+        res.json(results);
+    });
+});
+
+// --- OBTENER "PRODUCTOS" (MATERIALES) ---
 app.get('/api/materiales', (req, res) => {
     const sql = `
         SELECT M.ID_MATERIAL, M.NOMBRE, T.NOMBRE_TIPO_MATERIAL, M.MAX_DIAS_PRESTAMO
@@ -236,7 +271,7 @@ app.get('/api/materiales', (req, res) => {
     });
 });
 
-// --- OBTENER ITEMS DISPONIBLES (Encargado) ---
+// --- OBTENER ITEMS DISPONIBLES ---
 app.get('/api/items-disponibles/:id_material', (req, res) => {
     const { id_material } = req.params;
     const sql = `
@@ -255,7 +290,7 @@ app.get('/api/items-disponibles/:id_material', (req, res) => {
 app.get('/api/inventario', (req, res) => {
     const sql = `
         SELECT 
-            T.NOMBRE_TIPO_MATERIAL as nombre,
+            T.NOMBRE_TIPO_MATERIAL as TIPO,
             M.ID_MATERIAL,
             M.NOMBRE,
             M.MAX_DIAS_PRESTAMO,
@@ -275,8 +310,7 @@ app.get('/api/dashboard/admin-stats', (req, res) => {
     const sql_usuarios = 'SELECT COUNT(*) as total FROM USUARIOS WHERE ESTADO = 1';
     const sql_activos = 'SELECT COUNT(*) as total FROM SOLICITUDES WHERE ESTADO = 1';
     const sql_vencidos = 'SELECT COUNT(*) as total FROM SOLICITUDES WHERE ESTADO = 1 AND FECHA_DEVOLUCION < NOW()';
-    const sql_materiales = 'SELECT COUNT(*) as total FROM ITEMS_INVENTARIO'; // ¡CAMBIADO!
-
+    const sql_materiales = 'SELECT COUNT(*) as total FROM ITEMS_INVENTARIO';
     db.query(`${sql_usuarios}; ${sql_activos}; ${sql_vencidos}; ${sql_materiales}`, (err, results) => {
         if (err) { return res.status(500).json({ message: 'Error al calcular estadísticas' }); }
         res.json({
@@ -380,10 +414,10 @@ app.get('/api/prestamos/historial/:id_usuario', (req, res) => {
 });
 
 // ==========================================================
-// 7. ENDPOINTS DE ESCRITURA (Préstamos)
+// 7. ENDPOINTS DE ESCRITURA (Préstamos) (Sin cambios)
 // ==========================================================
 
-// --- CREAR PRÉSTAMO (Encargado - v2.0) ---
+// --- CREAR PRÉSTAMO (Encargado - v3.0) ---
 app.post('/api/prestamos/crear', (req, res) => {
     const { id_alumno, id_asignatura, id_item, id_usuario, fecha_prestamo, fecha_devolucion, responsable, observaciones } = req.body;
     db.beginTransaction(err => {
@@ -411,7 +445,7 @@ app.post('/api/prestamos/crear', (req, res) => {
     });
 });
 
-// --- DEVOLVER PRÉSTAMO (Encargado - v2.0) ---
+// --- DEVOLVER PRÉSTAMO (Encargado - v3.0) ---
 app.post('/api/prestamos/devolver', (req, res) => {
     const { id_solicitud, id_detalle, id_item, id_usuario_encargado, estado_material, observaciones, fecha_recepcion } = req.body;
     
@@ -422,10 +456,9 @@ app.post('/api/prestamos/devolver', (req, res) => {
         db.query(sqlSolicitud, [id_solicitud], (err, result) => {
             if (err) { return db.rollback(() => { console.error(err); res.status(500).json({ message: "Error al actualizar la solicitud" }); }); }
 
-            // 2. Devolver el ítem al inventario (Estado = 'Disponible')
-            const sqlInventario = "UPDATE ITEMS_INVENTARIO SET ESTADO = ? WHERE ID_ITEM = ?";
-            // Si el estado es "Bueno" o "Regular", vuelve a estar "Disponible". Si está "Malo", va a "Mantenimiento".
+            // 2. Devolver el ítem al inventario
             const nuevoEstadoItem = (estado_material === 'Bueno' || estado_material === 'Regular') ? 'Disponible' : 'Mantenimiento';
+            const sqlInventario = "UPDATE ITEMS_INVENTARIO SET ESTADO = ? WHERE ID_ITEM = ?";
             db.query(sqlInventario, [nuevoEstadoItem, id_item], (err, result) => {
                 if (err) { return db.rollback(() => { console.error(err); res.status(500).json({ message: "Error al actualizar inventario" }); }); }
 
@@ -460,6 +493,6 @@ app.post('/api/prestamos/devolver', (req, res) => {
 // ==========================================================
 const PORT = 3000;
 app.listen(PORT, () => {
-    console.log(`Servidor API v3.0 (Final) corriendo en http://localhost:${PORT}`);
+    console.log(`Servidor API v3.1 (Bcrypt) corriendo en http://localhost:${PORT}`);
     console.log('Presiona CTRL+C para detener el servidor.');
 });

@@ -128,7 +128,8 @@ async function cargarAlertas() {
         if (!response.ok) throw new Error('No se pudieron cargar las alertas');
         
         const inventario = await response.json();
-        const alertas = inventario.filter(item => item.disponibles < 5); // Alerta si hay menos de 5
+        // Filtramos por productos (materiales) que tengan stock bajo
+        const alertas = inventario.filter(item => item.disponibles < 5 && item.total > 0);
         
         if (alertas.length === 0) {
             alertasDiv.innerHTML = '<p class="text-muted text-center">No hay alertas</p>';
@@ -138,7 +139,7 @@ async function cargarAlertas() {
         alertasDiv.innerHTML = alertas.map(a => `
             <div class="alert-item alert-warning">
                 <i class="fas fa-exclamation-triangle"></i> 
-                Stock bajo de ${a.nombre}: solo ${a.disponibles} disponibles
+                Stock bajo de ${a.NOMBRE}: solo ${a.disponibles} disponibles
             </div>
         `).join('');
 
@@ -157,7 +158,7 @@ async function cargarActividadReciente() {
 
 
 // ==========================================================
-// GESTIÓN DE USUARIOS (Sin cambios)
+// GESTIÓN DE USUARIOS
 // ==========================================================
 const btnMostrarFormulario = document.getElementById('btnMostrarFormulario');
 const formularioUsuario = document.getElementById('formularioUsuario');
@@ -194,7 +195,7 @@ if (formAgregarUsuario) {
             telefono: document.getElementById('telefono').value,
             rol: document.getElementById('rolUsuarioNuevo').value,
             username: document.getElementById('username').value,
-            password: password,
+            password: password, // ¡Punto 4 Pendiente! (bcrypt)
             activo: document.getElementById('usuarioActivo').checked,
         };
         try {
@@ -269,7 +270,7 @@ function editarUsuario(id) {
 }
 
 // ==========================================================
-// GESTIÓN DE PRÉSTAMOS (v2.0)
+// GESTIÓN DE PRÉSTAMOS (v3.0 - Actualizada a nueva BD)
 // ==========================================================
 async function cargarPrestamos() {
     const tablaPrestamos = document.getElementById('tablaPrestamos');
@@ -282,7 +283,7 @@ async function cargarPrestamos() {
             return;
         }
         
-        // ¡CAMBIADO! Actualizado a la nueva estructura de la API
+        // ¡ACTUALIZADO! Muestra Código de Ítem y Encargado
         tablaPrestamos.innerHTML = prestamos.map((p, index) => {
             let estadoBadge = 'bg-secondary';
             let estadoTexto = 'Devuelto';
@@ -331,31 +332,44 @@ async function actualizarInventario() {
         document.getElementById('tablaInventarioDetalle').innerHTML = `<tr><td colspan="6" class="text-center text-danger">Error al cargar inventario.</td></tr>`;
         return;
     }
-    if (inventario.length === 0) {
-        document.getElementById('tablaInventarioDetalle').innerHTML = `<tr><td colspan="6" class="text-center text-muted">No hay materiales registrados</td></tr>`;
-        // Limpiamos las tarjetas si no hay nada
-        const tarjetas = ['tablets', 'notebooks', 'libros', 'deportivo'];
-        tarjetas.forEach(t => {
-            document.getElementById(`${t}Disponibles`).textContent = '0';
-            if (document.getElementById(`${t}Disponibles`).nextSibling) {
-                document.getElementById(`${t}Disponibles`).nextSibling.textContent = ' / 0';
+    
+    // Limpiamos tarjetas antes de llenarlas
+    const tarjetas = ['tablets', 'notebooks', 'libros', 'deportivo'];
+    tarjetas.forEach(t => {
+        const elDisp = document.getElementById(`${t}Disponibles`);
+        const elPrest = document.getElementById(`${t}Prestadas`);
+        const elProg = document.getElementById(`progress${t.charAt(0).toUpperCase() + t.slice(1)}`);
+        
+        if (elDisp) {
+            elDisp.textContent = '0';
+            if (elDisp.nextSibling && elDisp.nextSibling.nodeType === Node.TEXT_NODE) {
+                elDisp.nextSibling.textContent = ' / 0';
             }
-            document.getElementById(`${t}Prestadas`).textContent = '0';
-            document.getElementById(`progress${t.charAt(0).toUpperCase() + t.slice(1)}`).style.width = '0%';
-        });
+        }
+        if (elPrest) elPrest.textContent = '0';
+        if (elProg) elProg.style.width = '0%';
+    });
+    
+    if (inventario.length === 0) {
+        document.getElementById('tablaInventarioDetalle').innerHTML = `<tr><td colspan="6" class="text-center text-muted">No hay productos registrados</td></tr>`;
         return;
     }
     
     // 2. ACTUALIZAR LAS TARJETAS
     inventario.forEach(item => {
         let idDisp, idPrest, idProg, idTotalH2;
-        // Buscamos los IDs correspondientes del HTML del Admin
-        if (item.nombre.includes('Tablet')) { idDisp = 'tabletsDisponibles'; idPrest = 'tabletsPrestadas'; idProg = 'progressTablets'; idTotalH2 = 'tabletsDisponibles'; }
-        else if (item.nombre.includes('Notebook')) { idDisp = 'notebooksDisponibles'; idPrest = 'notebooksPrestadas'; idProg = 'progressNotebooks'; idTotalH2 = 'notebooksDisponibles'; }
-        else if (item.nombre.includes('Libro')) { idDisp = 'librosDisponibles'; idPrest = 'librosPrestados'; idProg = 'progressLibros'; idTotalH2 = 'librosDisponibles'; }
-        else if (item.nombre.includes('Deportivo')) { idDisp = 'deportivoDisponible'; idPrest = 'deportivoPrestado'; idProg = 'progressDeportivo'; idTotalH2 = 'deportivoDisponible'; }
+        
+        // Asignamos IDs basados en el NOMBRE del TIPO_MATERIAL
+        if (item.nombre.includes('Tablet')) { idDisp = 'tabletsDisponibles'; idPrest = 'tabletsPrestadas'; idProg = 'progressTablets'; }
+        else if (item.nombre.includes('Notebook')) { idDisp = 'notebooksDisponibles'; idPrest = 'notebooksPrestadas'; idProg = 'progressNotebooks'; }
+        else if (item.nombre.includes('Libro')) { idDisp = 'librosDisponibles'; idPrest = 'librosPrestados'; idProg = 'progressLibros'; }
+        else if (item.nombre.includes('Deportivo')) { idDisp = 'deportivoDisponible'; idPrest = 'deportivoPrestado'; idProg = 'progressDeportivo'; }
 
-        if (idDisp) {
+        // Mapeamos el ID 'deportivoDisponible' al 'tabletsDisponibles' si es necesario
+        if(idDisp === 'deportivoDisponible') idTotalH2 = 'deportivoDisponible';
+        else if (idDisp) idTotalH2 = idDisp;
+
+        if (idDisp && document.getElementById(idDisp)) {
             const prestados = item.total - item.disponibles;
             const progreso = (item.total > 0) ? (item.disponibles / item.total) * 100 : 0;
             
@@ -366,13 +380,8 @@ async function actualizarInventario() {
                     h2Element.nextSibling.textContent = ` / ${item.total}`; 
                 }
             }
-            
-            if (document.getElementById(idPrest)) {
-                document.getElementById(idPrest).textContent = prestados;
-            }
-            if (document.getElementById(idProg)) {
-                document.getElementById(idProg).style.width = progreso + '%';
-            }
+            if (document.getElementById(idPrest)) document.getElementById(idPrest).textContent = prestados;
+            if (document.getElementById(idProg)) document.getElementById(idProg).style.width = progreso + '%';
         }
     });
 
@@ -383,7 +392,7 @@ async function actualizarInventario() {
         const utilizacion = (m.total > 0) ? ((enPrestamo / m.total) * 100).toFixed(1) : 0;
         const estadoClass = utilizacion > 70 ? 'text-danger' : utilizacion > 40 ? 'text-warning' : 'text-success';
         
-        // ¡CAMBIADO! Usamos m.NOMBRE que es el texto plano (ej: "iPad Air")
+        // Usamos m.NOMBRE que es el texto plano (ej: "iPad Air")
         return `
             <tr>
                 <td><strong>${m.NOMBRE}</strong></td>
@@ -433,6 +442,11 @@ if (btnMostrarFormularioMaterial && formularioMaterial && btnCancelarFormularioM
             descripcion: document.getElementById('materialDescripcion').value,
             max_dias_prestamo: parseInt(document.getElementById('materialMaxDias').value)
         };
+
+        if (!nuevoMaterial.id_tipo_material || !nuevoMaterial.nombre || !nuevoMaterial.max_dias_prestamo) {
+            alert("Por favor, complete todos los campos obligatorios.");
+            return;
+        }
 
         try {
             const response = await fetch(`${API_URL}/materiales/crear`, {
@@ -559,7 +573,7 @@ async function cargarMaterialesParaAdmin() {
         });
     } catch (error) {
         console.error('Error cargando materiales:', error);
-        materialSelectItem.innerHTML = '<option value="">Error al cargar</option>';
+        materialSelectItem.innerHTML = '<option value="">Error al cargar</button>';
     }
 }
 
