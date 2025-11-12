@@ -1,4 +1,6 @@
-// dashboard-admin.js - VERSIÓN CONECTADA A BASE DE DATOS
+// dashboard-admin.js - VERSIÓN FINAL (v3.0)
+// Incluye toda la lógica de Admin + Nuevo Gestor de Inventario
+// (Cumple con los Puntos 1, 2 y 3 de las peticiones del cliente)
 
 // ==========================================================
 // DEFINIMOS LA URL DE NUESTRA API
@@ -6,40 +8,39 @@
 const API_URL = 'http://localhost:3000/api';
 
 // ==========================================================
-// VERIFICACIÓN DE SESIÓN (Esto no cambia)
+// VERIFICACIÓN DE SESIÓN
 // ==========================================================
 window.addEventListener('load', () => {
     const usuarioActual = sessionStorage.getItem('usuarioActual');
     const nombreUsuario = sessionStorage.getItem('nombreUsuario');
     const rolUsuario = sessionStorage.getItem('rolUsuario');
     
+    // 1. Validar que haya sesión
     if (!usuarioActual) {
         window.location.href = '../index.html';
         return;
     }
     
-    // Solo el Admin puede estar aquí
+    // 2. Validar que sea Admin
     if (rolUsuario !== 'Administrador') {
         alert('Acceso denegado. No tienes permisos de Administrador.');
         window.location.href = '../index.html'; // O al dashboard de encargado
         return;
     }
     
-    // Mostrar información del usuario
+    // 3. Cargar datos de UI
     document.getElementById('nombreUsuario').textContent = nombreUsuario;
     document.getElementById('rolUsuario').textContent = rolUsuario;
-    
-    // Mostrar fecha actual
     actualizarFecha();
     
-    // Cargar datos iniciales
+    // 4. Cargar datos iniciales del Dashboard
     cargarDashboard();
-    cargarActividadReciente(); // Aún no conectada, pero la dejamos lista
+    cargarActividadReciente(); // (Aún pendiente de lógica completa)
     cargarAlertas();
 });
 
 // ==========================================================
-// NAVEGACIÓN Y UI (Esto no cambia)
+// NAVEGACIÓN Y UI (Sin cambios)
 // ==========================================================
 const navLinks = document.querySelectorAll('.sidebar-nav .nav-link');
 const sections = document.querySelectorAll('.content-section');
@@ -64,9 +65,9 @@ navLinks.forEach(link => {
         };
         pageTitle.textContent = titles[sectionId];
         
-        // Cargar datos según la sección
+        // Cargar datos dinámicamente al cambiar de pestaña
         if (sectionId === 'inventario') {
-            actualizarInventario();
+            actualizarInventario(); // Carga tarjetas Y tabla
         } else if (sectionId === 'usuarios') {
             cargarUsuarios();
         } else if (sectionId === 'prestamos') {
@@ -99,7 +100,7 @@ function actualizarFecha() {
 }
 
 // ==========================================================
-// CARGAR DATOS (¡Aquí reemplazamos localStorage por fetch!)
+// CARGAR DATOS (Dashboard, Alertas, etc.)
 // ==========================================================
 
 // --- Cargar Tarjetas (Stats) ---
@@ -107,13 +108,12 @@ async function cargarDashboard() {
     try {
         const response = await fetch(`${API_URL}/dashboard/admin-stats`);
         if (!response.ok) throw new Error('No se pudieron cargar las estadísticas');
-        
         const stats = await response.json();
         
         document.getElementById('totalUsuarios').textContent = stats.totalUsuarios;
         document.getElementById('prestamosActivos').textContent = stats.prestamosActivos;
         document.getElementById('prestamosVencidos').textContent = stats.prestamosVencidos;
-        document.getElementById('totalMateriales').textContent = stats.totalMateriales || 170; // 170 es tu valor de respaldo
+        document.getElementById('totalMateriales').textContent = stats.totalMateriales;
 
     } catch (error) {
         console.error('Error cargando dashboard:', error);
@@ -124,10 +124,11 @@ async function cargarDashboard() {
 async function cargarAlertas() {
     const alertasDiv = document.getElementById('alertasSistema');
     try {
-        const response = await fetch(`${API_URL}/alertas`);
+        const response = await fetch(`${API_URL}/inventario`); // Reutilizamos el endpoint de inventario
         if (!response.ok) throw new Error('No se pudieron cargar las alertas');
         
-        const alertas = await response.json();
+        const inventario = await response.json();
+        const alertas = inventario.filter(item => item.disponibles < 5); // Alerta si hay menos de 5
         
         if (alertas.length === 0) {
             alertasDiv.innerHTML = '<p class="text-muted text-center">No hay alertas</p>';
@@ -147,98 +148,83 @@ async function cargarAlertas() {
     }
 }
 
-// --- Cargar Actividad Reciente (Pestaña Préstamos) ---
+// --- Cargar Actividad Reciente (Pendiente) ---
 async function cargarActividadReciente() {
-    // Esta la dejaremos pendiente, por ahora un placeholder
     const actividadDiv = document.getElementById('actividadReciente');
     actividadDiv.innerHTML = '<p class="text-muted text-center">No hay actividad reciente</p>';
-    // Para conectarla, tendrías que llamar a /api/prestamos y mostrar los 5 últimos
+    // Para conectar: llamar a /api/prestamos y mostrar los 5 últimos
 }
 
 
 // ==========================================================
-// GESTIÓN DE USUARIOS (¡Conectado!)
+// GESTIÓN DE USUARIOS (Sin cambios)
 // ==========================================================
 const btnMostrarFormulario = document.getElementById('btnMostrarFormulario');
 const formularioUsuario = document.getElementById('formularioUsuario');
 const btnCancelarFormulario = document.getElementById('btnCancelarFormulario');
 const formAgregarUsuario = document.getElementById('formAgregarUsuario');
 
-btnMostrarFormulario.addEventListener('click', () => {
-    formularioUsuario.style.display = 'block';
-    btnMostrarFormulario.style.display = 'none';
-});
-
-btnCancelarFormulario.addEventListener('click', () => {
-    formularioUsuario.style.display = 'none';
-    btnMostrarFormulario.style.display = 'block';
-    formAgregarUsuario.reset();
-});
-
-// --- ENVIAR FORMULARIO DE NUEVO USUARIO ---
-formAgregarUsuario.addEventListener('submit', async (e) => {
-    e.preventDefault();
-    
-    const password = document.getElementById('passwordNuevo').value;
-    const confirmarPassword = document.getElementById('confirmarPassword').value;
-    
-    if (password !== confirmarPassword) {
-        alert('Las contraseñas no coinciden');
-        return;
-    }
-    
-    const nuevoUsuario = {
-        nombre: document.getElementById('nombreCompleto').value,
-        rut: document.getElementById('rut').value,
-        email: document.getElementById('email').value,
-        telefono: document.getElementById('telefono').value,
-        rol: document.getElementById('rolUsuarioNuevo').value,
-        username: document.getElementById('username').value,
-        password: password,
-        activo: document.getElementById('usuarioActivo').checked,
-    };
-
-    try {
-        const response = await fetch(`${API_URL}/usuarios/crear`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(nuevoUsuario)
-        });
-
-        const data = await response.json();
-
-        if (!response.ok) {
-            throw new Error(data.message || 'Error al crear usuario');
-        }
-
-        alert('Usuario creado exitosamente');
-        formAgregarUsuario.reset();
+if (btnMostrarFormulario) {
+    btnMostrarFormulario.addEventListener('click', () => {
+        formularioUsuario.style.display = 'block';
+        btnMostrarFormulario.style.display = 'none';
+    });
+}
+if (btnCancelarFormulario) {
+    btnCancelarFormulario.addEventListener('click', () => {
         formularioUsuario.style.display = 'none';
         btnMostrarFormulario.style.display = 'block';
-        
-        cargarUsuarios(); // Recargar la tabla
-        cargarDashboard(); // Actualizar el contador de usuarios
+        formAgregarUsuario.reset();
+    });
+}
 
-    } catch (error) {
-        console.error('Error al crear usuario:', error);
-        alert(`Error: ${error.message}`);
-    }
-});
+if (formAgregarUsuario) {
+    formAgregarUsuario.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const password = document.getElementById('passwordNuevo').value;
+        const confirmarPassword = document.getElementById('confirmarPassword').value;
+        if (password !== confirmarPassword) {
+            alert('Las contraseñas no coinciden');
+            return;
+        }
+        const nuevoUsuario = {
+            nombre: document.getElementById('nombreCompleto').value,
+            rut: document.getElementById('rut').value,
+            email: document.getElementById('email').value,
+            telefono: document.getElementById('telefono').value,
+            rol: document.getElementById('rolUsuarioNuevo').value,
+            username: document.getElementById('username').value,
+            password: password,
+            activo: document.getElementById('usuarioActivo').checked,
+        };
+        try {
+            const response = await fetch(`${API_URL}/usuarios/crear`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(nuevoUsuario)
+            });
+            const data = await response.json();
+            if (!response.ok) { throw new Error(data.message || 'Error al crear usuario'); }
+            alert('Usuario creado exitosamente');
+            formAgregarUsuario.reset();
+            formularioUsuario.style.display = 'none';
+            btnMostrarFormulario.style.display = 'block';
+            cargarUsuarios();
+            cargarDashboard();
+        } catch (error) { console.error('Error al crear usuario:', error); alert(`Error: ${error.message}`); }
+    });
+}
 
-// --- CARGAR TABLA DE USUARIOS ---
 async function cargarUsuarios() {
     const tablaUsuarios = document.getElementById('tablaUsuarios');
     try {
         const response = await fetch(`${API_URL}/usuarios`);
         if (!response.ok) throw new Error('No se pudieron cargar los usuarios');
-        
         const usuarios = await response.json();
-        
         if (usuarios.length === 0) {
             tablaUsuarios.innerHTML = `<tr><td colspan="7" class="text-center text-muted">No hay usuarios registrados</td></tr>`;
             return;
         }
-        
         tablaUsuarios.innerHTML = usuarios.map((usuario, index) => `
             <tr>
                 <td>${usuario.ID_USUARIO}</td>
@@ -261,73 +247,43 @@ async function cargarUsuarios() {
                 </td>
             </tr>
         `).join('');
-
-    } catch (error) {
-        console.error('Error cargando usuarios:', error);
-        tablaUsuarios.innerHTML = `<tr><td colspan="7" class="text-center text-danger">Error al cargar usuarios.</td></tr>`;
-    }
+    } catch (error) { console.error('Error cargando usuarios:', error); tablaUsuarios.innerHTML = `<tr><td colspan="7" class="text-center text-danger">Error al cargar usuarios.</td></tr>`; }
 }
 
-// --- ELIMINAR USUARIO ---
 async function eliminarUsuario(id) {
-    // No permitimos borrar el usuario admin (ID 1)
-    if (id === 1) {
-        alert('No se puede eliminar al usuario Administrador principal.');
-        return;
-    }
-    
+    if (id === 1) { alert('No se puede eliminar al usuario Administrador principal.'); return; }
     if (confirm('¿Está seguro de eliminar este usuario? Esta acción es irreversible.')) {
         try {
-            const response = await fetch(`${API_URL}/usuarios/eliminar/${id}`, {
-                method: 'DELETE'
-            });
-
+            const response = await fetch(`${API_URL}/usuarios/eliminar/${id}`, { method: 'DELETE' });
             const data = await response.json();
-
-            if (!response.ok) {
-                throw new Error(data.message || 'Error al eliminar usuario');
-            }
-
+            if (!response.ok) { throw new Error(data.message || 'Error al eliminar usuario'); }
             alert('Usuario eliminado exitosamente');
-            cargarUsuarios(); // Recargar la tabla
-            cargarDashboard(); // Actualizar stats
-
-        } catch (error) {
-            console.error('Error al eliminar usuario:', error);
-            alert(`Error: ${error.message}`);
-        }
+            cargarUsuarios();
+            cargarDashboard();
+        } catch (error) { console.error('Error al eliminar usuario:', error); alert(`Error: ${error.message}`); }
     }
 }
 
-// --- EDITAR USUARIO (Función de ejemplo, no conectada) ---
 function editarUsuario(id) {
     alert(`Función "Editar" aún no implementada. Se editaría el usuario con ID: ${id}`);
-    // Para implementarla:
-    // 1. Harías un fetch a /api/usuarios/${id} para obtener sus datos.
-    // 2. Llenarías el formulario con esos datos.
-    // 3. Cambiarías el botón "Guardar" por "Actualizar".
-    // 4. El submit haría un fetch con método 'PUT' o 'PATCH' a /api/usuarios/actualizar/${id}
 }
 
-
 // ==========================================================
-// GESTIÓN DE PRÉSTAMOS (Conectada)
+// GESTIÓN DE PRÉSTAMOS (v2.0)
 // ==========================================================
 async function cargarPrestamos() {
     const tablaPrestamos = document.getElementById('tablaPrestamos');
     try {
-        const response = await fetch(`${API_URL}/prestamos`); // Llama al endpoint que acabamos de mejorar
+        const response = await fetch(`${API_URL}/prestamos`);
         if (!response.ok) throw new Error('No se pudieron cargar los préstamos');
-
         const prestamos = await response.json();
-
         if (prestamos.length === 0) {
             tablaPrestamos.innerHTML = `<tr><td colspan="8" class="text-center text-muted">No hay préstamos registrados</td></tr>`;
             return;
         }
-
+        
+        // ¡CAMBIADO! Actualizado a la nueva estructura de la API
         tablaPrestamos.innerHTML = prestamos.map((p, index) => {
-            // Lógica para determinar el estado (Activo, Vencido, Devuelto)
             let estadoBadge = 'bg-secondary';
             let estadoTexto = 'Devuelto';
             if (p.ESTADO === 1) { // 1 = Activo
@@ -339,15 +295,13 @@ async function cargarPrestamos() {
                     estadoTexto = 'Activo';
                 }
             }
-            
             return `
                 <tr>
                     <td>${p.ID_SOLICITUD}</td>
                     <td>${p.ALUMNO_NOMBRE} ${p.ALUMNO_APELLIDO}</td>
                     <td>${p.MATERIAL_NOMBRE}</td>
-                    <td><span class="badge bg-info">${p.CANTIDAD}</span></td>
-                    <td>${formatearFecha(p.FECHA_SOLICITUD)}</td>
-                    <td>${formatearFecha(p.FECHA_DEVOLUCION)}</td>
+                    <td><span class="badge bg-secondary">${p.CODIGO_PATRIMONIAL}</span></td>
+                    <td><span class="badge bg-dark">${p.ENCARGADO_USERNAME}</span></td>
                     <td><span class="badge ${estadoBadge}">${estadoTexto}</span></td>
                     <td>
                         ${p.ESTADO === 1 ? `<button class="btn btn-sm btn-success" onclick="adminDevolver(${p.ID_SOLICITUD})">Devolver</button>` : ''}
@@ -355,32 +309,18 @@ async function cargarPrestamos() {
                 </tr>
             `;
         }).join('');
-
-    } catch (error) {
-        console.error('Error cargando préstamos:', error);
-        tablaPrestamos.innerHTML = `<tr><td colspan="8" class="text-center text-danger">Error al cargar préstamos.</td></tr>`;
-    }
+    } catch (error) { console.error('Error cargando préstamos:', error); tablaPrestamos.innerHTML = `<tr><td colspan="8" class="text-center text-danger">Error al cargar préstamos.</td></tr>`; }
 }
 
-// ¡AÑADE ESTA FUNCIÓN AL FINAL DEL ARCHIVO!
-// (La necesitamos para el botón de devolver que acabamos de agregar)
 function adminDevolver(id) {
     alert(`¡Función DEVOLVER (Admin) aún no conectada! Se devolvería el préstamo ID: ${id}`);
-    // La lógica sería idéntica a la del Encargado:
-    // 1. Abrir un modal
-    // 2. Llamar a un endpoint /api/prestamos/devolver/:id
-    // 3. Recargar la tabla
+    // Este endpoint debe ser creado en el backend.
 }
 
-
 // ==========================================================
-// GESTIÓN DE INVENTARIO (Conectada)
-// ==========================================================
-// ==========================================================
-// GESTIÓN DE INVENTARIO (¡VERSIÓN CORREGIDA!)
+// GESTIÓN DE INVENTARIO (v3.0 - Cumple requisitos de cliente)
 // ==========================================================
 async function actualizarInventario() {
-    // 1. OBTENER LOS DATOS MÁS RECIENTES DE LA API
     let inventario;
     try {
         const response = await fetch(`${API_URL}/inventario`);
@@ -391,41 +331,62 @@ async function actualizarInventario() {
         document.getElementById('tablaInventarioDetalle').innerHTML = `<tr><td colspan="6" class="text-center text-danger">Error al cargar inventario.</td></tr>`;
         return;
     }
-
     if (inventario.length === 0) {
         document.getElementById('tablaInventarioDetalle').innerHTML = `<tr><td colspan="6" class="text-center text-muted">No hay materiales registrados</td></tr>`;
+        // Limpiamos las tarjetas si no hay nada
+        const tarjetas = ['tablets', 'notebooks', 'libros', 'deportivo'];
+        tarjetas.forEach(t => {
+            document.getElementById(`${t}Disponibles`).textContent = '0';
+            if (document.getElementById(`${t}Disponibles`).nextSibling) {
+                document.getElementById(`${t}Disponibles`).nextSibling.textContent = ' / 0';
+            }
+            document.getElementById(`${t}Prestadas`).textContent = '0';
+            document.getElementById(`progress${t.charAt(0).toUpperCase() + t.slice(1)}`).style.width = '0%';
+        });
         return;
     }
-
-    // 2. ACTUALIZAR LAS TARJETAS (¡LA PARTE QUE FALTABA!)
+    
+    // 2. ACTUALIZAR LAS TARJETAS
     inventario.forEach(item => {
-        let idDisp, idPrest, idProg;
+        let idDisp, idPrest, idProg, idTotalH2;
         // Buscamos los IDs correspondientes del HTML del Admin
-        if (item.nombre.includes('Tablet')) { idDisp = 'tabletsDisponibles'; idPrest = 'tabletsPrestadas'; idProg = 'progressTablets'; }
-        else if (item.nombre.includes('Notebook')) { idDisp = 'notebooksDisponibles'; idPrest = 'notebooksPrestadas'; idProg = 'progressNotebooks'; }
-        else if (item.nombre.includes('Libro')) { idDisp = 'librosDisponibles'; idPrest = 'librosPrestados'; idProg = 'progressLibros'; }
-        else if (item.nombre.includes('Deportivo')) { idDisp = 'deportivoDisponible'; idPrest = 'deportivoPrestado'; idProg = 'progressDeportivo'; }
+        if (item.nombre.includes('Tablet')) { idDisp = 'tabletsDisponibles'; idPrest = 'tabletsPrestadas'; idProg = 'progressTablets'; idTotalH2 = 'tabletsDisponibles'; }
+        else if (item.nombre.includes('Notebook')) { idDisp = 'notebooksDisponibles'; idPrest = 'notebooksPrestadas'; idProg = 'progressNotebooks'; idTotalH2 = 'notebooksDisponibles'; }
+        else if (item.nombre.includes('Libro')) { idDisp = 'librosDisponibles'; idPrest = 'librosPrestados'; idProg = 'progressLibros'; idTotalH2 = 'librosDisponibles'; }
+        else if (item.nombre.includes('Deportivo')) { idDisp = 'deportivoDisponible'; idPrest = 'deportivoPrestado'; idProg = 'progressDeportivo'; idTotalH2 = 'deportivoDisponible'; }
 
         if (idDisp) {
             const prestados = item.total - item.disponibles;
             const progreso = (item.total > 0) ? (item.disponibles / item.total) * 100 : 0;
             
-            document.getElementById(idDisp).textContent = item.disponibles;
-            document.getElementById(idPrest).textContent = prestados;
-            document.getElementById(idProg).style.width = progreso + '%';
+            const h2Element = document.getElementById(idTotalH2);
+            if (h2Element) {
+                h2Element.textContent = item.disponibles; 
+                if (h2Element.nextSibling && h2Element.nextSibling.nodeType === Node.TEXT_NODE) {
+                    h2Element.nextSibling.textContent = ` / ${item.total}`; 
+                }
+            }
+            
+            if (document.getElementById(idPrest)) {
+                document.getElementById(idPrest).textContent = prestados;
+            }
+            if (document.getElementById(idProg)) {
+                document.getElementById(idProg).style.width = progreso + '%';
+            }
         }
     });
 
-    // 3. ACTUALIZAR LA TABLA (Esta parte ya la teníamos)
+    // 3. ACTUALIZAR LA TABLA
     const tablaInventario = document.getElementById('tablaInventarioDetalle');
     tablaInventario.innerHTML = inventario.map(m => {
         const enPrestamo = m.total - m.disponibles;
         const utilizacion = (m.total > 0) ? ((enPrestamo / m.total) * 100).toFixed(1) : 0;
         const estadoClass = utilizacion > 70 ? 'text-danger' : utilizacion > 40 ? 'text-warning' : 'text-success';
         
+        // ¡CAMBIADO! Usamos m.NOMBRE que es el texto plano (ej: "iPad Air")
         return `
             <tr>
-                <td><strong>${m.nombre}</strong></td>
+                <td><strong>${m.NOMBRE}</strong></td>
                 <td>${m.total}</td>
                 <td><span class="badge bg-success">${m.disponibles}</span></td>
                 <td><span class="badge bg-warning">${enPrestamo}</span></td>
@@ -440,6 +401,185 @@ async function actualizarInventario() {
     }).join('');
 }
 
+// ==========================================================
+// LÓGICA PARA GESTIÓN DE TIPOS DE MATERIAL (Punto 3 Cliente)
+// ==========================================================
+const btnMostrarFormularioMaterial = document.getElementById('btnMostrarFormularioMaterial');
+const formularioMaterial = document.getElementById('formularioMaterial');
+const btnCancelarFormularioMaterial = document.getElementById('btnCancelarFormularioMaterial');
+const formAgregarMaterial = document.getElementById('formAgregarMaterial');
+const categoriaSelectMaterial = document.getElementById('categoriaSelectMaterial');
+
+if (btnMostrarFormularioMaterial && formularioMaterial && btnCancelarFormularioMaterial && formAgregarMaterial && categoriaSelectMaterial) {
+    
+    btnMostrarFormularioMaterial.addEventListener('click', () => {
+        formularioMaterial.style.display = 'block';
+        btnMostrarFormularioMaterial.style.display = 'none';
+        cargarCategoriasParaAdmin();
+    });
+
+    btnCancelarFormularioMaterial.addEventListener('click', () => {
+        formularioMaterial.style.display = 'none';
+        btnMostrarFormularioMaterial.style.display = 'block';
+        formAgregarMaterial.reset();
+    });
+
+    formAgregarMaterial.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const nuevoMaterial = {
+            id_tipo_material: categoriaSelectMaterial.value,
+            nombre: document.getElementById('materialNombre').value,
+            descripcion: document.getElementById('materialDescripcion').value,
+            max_dias_prestamo: parseInt(document.getElementById('materialMaxDias').value)
+        };
+
+        try {
+            const response = await fetch(`${API_URL}/materiales/crear`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(nuevoMaterial)
+            });
+
+            const data = await response.json();
+            if (!response.ok) { throw new Error(data.message || 'Error al crear el material'); }
+
+            alert('✅ ¡Nuevo tipo de producto creado exitosamente!');
+            formAgregarMaterial.reset();
+            
+            // Recargamos el <select> del *otro* formulario
+            cargarMaterialesParaAdmin();
+
+        } catch (error) {
+            console.error('Error al crear material:', error);
+            alert(`Error: ${error.message}`);
+        }
+    });
+}
+
+// --- Cargar el <select> de Categorías (TIPO_MATERIALES) ---
+async function cargarCategoriasParaAdmin() {
+    try {
+        const response = await fetch(`${API_URL}/tipos-materiales`);
+        if (!response.ok) throw new Error('Respuesta de red no fue OK');
+        const categorias = await response.json();
+        
+        categoriaSelectMaterial.innerHTML = '<option value="">-- Seleccione una categoría --</option>';
+        categorias.forEach(cat => {
+            categoriaSelectMaterial.innerHTML += `
+                <option value="${cat.ID_TIPO_MATERIAL}">
+                    ${cat.NOMBRE_TIPO_MATERIAL} (Prefijo: ${cat.PREFIJO})
+                </option>
+            `;
+        });
+    } catch (error) {
+        console.error('Error cargando categorías:', error);
+        categoriaSelectMaterial.innerHTML = '<option value="">Error al cargar</option>';
+    }
+}
+
+
+// ==========================================================
+// LÓGICA PARA GESTIÓN DE ÍTEMS (Punto 1.C)
+// ==========================================================
+const btnMostrarFormularioItem = document.getElementById('btnMostrarFormularioItem');
+const formularioItem = document.getElementById('formularioItem');
+const btnCancelarFormularioItem = document.getElementById('btnCancelarFormularioItem');
+const formAgregarItem = document.getElementById('formAgregarItem');
+const materialSelectItem = document.getElementById('materialSelectItem');
+
+if (btnMostrarFormularioItem && formularioItem && btnCancelarFormularioItem && formAgregarItem && materialSelectItem) {
+    
+    btnMostrarFormularioItem.addEventListener('click', () => {
+        formularioItem.style.display = 'block';
+        btnMostrarFormularioItem.style.display = 'none';
+        cargarMaterialesParaAdmin();
+        cargarUbicacionesParaAdmin(); // Cargar el nuevo <select>
+    });
+
+    btnCancelarFormularioItem.addEventListener('click', () => {
+        formularioItem.style.display = 'none';
+        btnMostrarFormularioItem.style.display = 'block';
+        formAgregarItem.reset();
+    });
+
+    // --- Enviar el formulario de nuevo ítem (v3.0 - Genera Códigos) ---
+    formAgregarItem.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        
+        const nuevoItem = {
+            id_material: materialSelectItem.value,
+            cantidad: parseInt(document.getElementById('itemCantidad').value),
+            id_ubicacion: document.getElementById('itemUbicacionSelect').value,
+            estado: 'Disponible'
+        };
+        
+        if (!nuevoItem.id_material || !nuevoItem.id_ubicacion) {
+            alert('Debe seleccionar un producto y una ubicación.');
+            return;
+        }
+        if (!nuevoItem.cantidad || nuevoItem.cantidad < 1) {
+            alert('Debe ingresar una cantidad válida.');
+            return;
+        }
+
+        try {
+            const response = await fetch(`${API_URL}/items/crear`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(nuevoItem)
+            });
+
+            const data = await response.json();
+            if (!response.ok) { throw new Error(data.message || 'Error al crear el ítem'); }
+
+            alert(`✅ ¡${nuevoItem.cantidad} ítems agregados exitosamente!`);
+            formAgregarItem.reset();
+            
+            // Recargar la vista de inventario para ver el cambio
+            actualizarInventario();
+
+        } catch (error) {
+            console.error('Error al crear ítem:', error);
+            alert(`Error: ${error.message}`);
+        }
+    });
+}
+
+// --- Cargar el <select> de Productos (MATERIALES) ---
+async function cargarMaterialesParaAdmin() {
+    try {
+        const response = await fetch(`${API_URL}/materiales`); 
+        if (!response.ok) throw new Error('Respuesta de red no fue OK');
+        const materiales = await response.json();
+        
+        materialSelectItem.innerHTML = '<option value="">-- Seleccione un producto --</option>';
+        materiales.forEach(mat => {
+            materialSelectItem.innerHTML += `<option value="${mat.ID_MATERIAL}">${mat.NOMBRE_TIPO_MATERIAL} - ${mat.NOMBRE}</option>`;
+        });
+    } catch (error) {
+        console.error('Error cargando materiales:', error);
+        materialSelectItem.innerHTML = '<option value="">Error al cargar</option>';
+    }
+}
+
+// --- Cargar el <select> de Ubicaciones ---
+async function cargarUbicacionesParaAdmin() {
+    const select = document.getElementById('itemUbicacionSelect');
+    try {
+        const response = await fetch(`${API_URL}/ubicaciones`);
+        if (!response.ok) throw new Error('Respuesta de red no fue OK');
+        const ubicaciones = await response.json();
+        
+        select.innerHTML = '<option value="">-- Seleccione una ubicación --</option>';
+        ubicaciones.forEach(u => {
+            select.innerHTML += `<option value="${u.ID_UBICACION}">${u.NOMBRE_UBICACION}</option>`;
+        });
+    } catch (error) {
+        console.error('Error cargando ubicaciones:', error);
+        select.innerHTML = '<option value="">Error al cargar</option>';
+    }
+}
 
 // ==========================================================
 // UTILIDADES (Formatear Fecha)

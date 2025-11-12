@@ -32,6 +32,7 @@ window.addEventListener('load', () => {
     actualizarInventarioDisplay();
     cargarAlumnosSelect();
     cargarMaterialesSelect();
+    cargarAsignaturasSelect();
 
     document.getElementById('btnConfirmarDevolucion').addEventListener('click', confirmarDevolucion);
 });
@@ -93,22 +94,153 @@ async function cargarAlumnosSelect() { /* (Sin cambios) */
         alumnos.forEach(alumno => { select.innerHTML += `<option value="${alumno.ID_ALUMNO}">${alumno.NOMBRE} ${alumno.APELLIDO} (${alumno.RUT} - ${alumno.CURSO})</option>`; });
     } catch (error) { console.error('Error cargando alumnos:', error); select.innerHTML = '<option value="">Error al cargar alumnos</option>'; }
 }
-async function cargarMaterialesSelect() { /* (Sin cambios) */
+// --- Cargar Asignaturas(Asignaturas) ---
+async function cargarAsignaturasSelect() {
+    const select = document.getElementById('asignaturaSelect');
+    try {
+        const response = await fetch(`${API_URL}/asignaturas`);
+        if (!response.ok) throw new Error('Respuesta de red no fue OK');
+        const asignaturas = await response.json();
+
+        select.innerHTML = '<option value="">-- Seleccione una asignatura --</option>'; // Limpiar
+        asignaturas.forEach(asig => {
+            select.innerHTML += `
+                <option value="${asig.ID_ASIGNATURA}">
+                    ${asig.NOMBRE_ASIGNATURA}
+                </option>
+            `;
+        });
+    } catch (error) {
+        console.error('Error cargando asignaturas:', error);
+        select.innerHTML = '<option value="">Error al cargar asignaturas</option>';
+    }
+}
+
+// --- ¡NUEVA FUNCIÓN! PARA EL PUNTO 1 (Items) ---
+async function cargarItemsDisponibles(idMaterial) {
+    const select = document.getElementById('itemSelect');
+    const info = document.getElementById('itemDisponiblesInfo');
+
+    if (!idMaterial) {
+        select.innerHTML = '<option value="">-- Primero seleccione una categoría --</option>';
+        select.disabled = true;
+        info.textContent = '';
+        return;
+    }
+
+    try {
+        const response = await fetch(`${API_URL}/items-disponibles/${idMaterial}`);
+        if (!response.ok) throw new Error('Respuesta de red no fue OK');
+        const items = await response.json();
+
+        if (items.length === 0) {
+            select.innerHTML = '<option value="">-- No hay ítems disponibles --</option>';
+            select.disabled = true;
+            info.textContent = '0 ítems disponibles.';
+            return;
+        }
+
+        select.innerHTML = '<option value="">-- Seleccione un ítem específico --</option>';
+        items.forEach(item => {
+            select.innerHTML += `
+                <option value="${item.ID_ITEM}">
+                    ${item.CODIGO_PATRIMONIAL}
+                </option>
+            `;
+        });
+        select.disabled = false;
+        info.textContent = `${items.length} ítems disponibles.`;
+
+    } catch (error) {
+        console.error('Error cargando ítems:', error);
+        select.innerHTML = '<option value="">Error al cargar ítems</option>';
+        select.disabled = true;
+    }
+}
+// --- FUNCIÓN MODIFICADA (Punto 1 y 3.B) ---
+async function cargarMaterialesSelect() {
     const select = document.getElementById('materialSelect');
     try {
         const response = await fetch(`${API_URL}/materiales`);
         if (!response.ok) throw new Error('Respuesta de red no fue OK');
         const materiales = await response.json();
-        select.innerHTML = '<option value="">-- Seleccione material --</option>';
-        materiales.forEach(mat => { select.innerHTML += `<option value="${mat.ID_MATERIAL}" data-disponibles="${mat.CANTIDAD_DISPONIBLE}">${mat.NOMBRE_TIPO_MATERIAL} - ${mat.NOMBRE} (Disp: ${mat.CANTIDAD_DISPONIBLE})</option>`; });
-    } catch (error) { console.error('Error cargando materiales:', error); select.innerHTML = '<option value="">Error al cargar materiales</option>'; }
+
+        select.innerHTML = '<option value="">-- Seleccione una categoría --</option>';
+        materiales.forEach(mat => {
+            // ¡Guardamos los días máximos en el HTML!
+            select.innerHTML += `
+                <option value="${mat.ID_MATERIAL}" data-max-dias="${mat.MAX_DIAS_PRESTAMO}">
+                    ${mat.NOMBRE_TIPO_MATERIAL} - ${mat.NOMBRE}
+                </option>
+            `;
+        });
+    } catch (error) {
+        console.error('Error cargando materiales:', error);
+        select.innerHTML = '<option value="">Error al cargar materiales</option>';
+    }
 }
-document.getElementById('materialSelect').addEventListener('change', (e) => { /* (Sin cambios) */
+// --- LISTENER MODIFICADO  ---
+document.getElementById('materialSelect').addEventListener('change', (e) => {
+    const idMaterialSeleccionado = e.target.value;
     const opcionSeleccionada = e.target.selectedOptions[0];
-    const disponibles = opcionSeleccionada.getAttribute('data-disponibles') || '-';
-    document.getElementById('disponiblesInfo').textContent = disponibles;
-    document.getElementById('cantidadPrestamo').max = disponibles;
+    const maxDias = opcionSeleccionada.getAttribute('data-max-dias') || 7;
+
+    // 1. Cargar los ítems específicos
+    cargarItemsDisponibles(idMaterialSeleccionado);
+
+    // 2. Implementar regla de Días Máximos 
+    const msgLimite = document.getElementById('fechaLimiteMsg');
+    msgLimite.textContent = `Límite de préstamo para este material: ${maxDias} días.`;
+    msgLimite.classList.remove('d-none');
+
+    // 3. Implementar validación de fechas 
+    validarFechas(maxDias);
 });
+
+
+// --- ¡NUEVAS FUNCIONES! PARA VALIDACIÓN DE FECHAS (Punto 3.A) ---
+const fechaPrestamoInput = document.getElementById('fechaPrestamo');
+const fechaDevolucionInput = document.getElementById('fechaDevolucion');
+const fechaErrorMsg = document.getElementById('fechaErrorMsg');
+
+function validarFechas(maxDias = null) {
+    const inicio = new Date(fechaPrestamoInput.value);
+    const fin = new Date(fechaDevolucionInput.value);
+
+    // 1. Validar que la devolución no sea antes que el préstamo
+    if (fin < inicio) {
+        fechaErrorMsg.classList.remove('d-none');
+        return false;
+    } else {
+        fechaErrorMsg.classList.add('d-none');
+    }
+
+    // 2. Validar el límite de días (Punto 3.B)
+    if (maxDias) {
+        const unDia = 1000 * 60 * 60 * 24;
+        const diferenciaMs = fin.getTime() - inicio.getTime();
+        const diferenciaDias = Math.ceil(diferenciaMs / unDia);
+
+        const msgLimite = document.getElementById('fechaLimiteMsg');
+        if (diferenciaDias > maxDias) {
+            msgLimite.textContent = `Error: El préstamo no puede exceder los ${maxDias} días.`;
+            msgLimite.classList.remove('d-none');
+            msgLimite.classList.remove('text-info');
+            msgLimite.classList.add('text-danger');
+            return false;
+        } else {
+            msgLimite.textContent = `Límite de préstamo para este material: ${maxDias} días.`;
+            msgLimite.classList.remove('d-none');
+            msgLimite.classList.add('text-info');
+            msgLimite.classList.remove('text-danger');
+        }
+    }
+    return true;
+}
+
+// Añadimos los listeners a las fechas
+fechaPrestamoInput.addEventListener('change', () => validarFechas());
+fechaDevolucionInput.addEventListener('change', () => validarFechas());
 
 // ==========================================================
 // CARGAR TABLAS Y ESTADÍSTICAS
@@ -291,28 +423,74 @@ async function actualizarInventarioCompleto() { /* (Sin cambios) */
 // ==========================================================
 // FORMULARIO NUEVO PRÉSTAMO (Sin cambios)
 // ==========================================================
+// ==========================================================
+// FORMULARIO NUEVO PRÉSTAMO (¡CONECTADO A VERSIÓN 2.0!)
+// (REEMPLAZA EL addEventListener ANTIGUO)
+// ==========================================================
 const formNuevoPrestamo = document.getElementById('formNuevoPrestamo');
+
 formNuevoPrestamo.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const prestamo = { id_alumno: document.getElementById('alumnoSelect').value, id_material: document.getElementById('materialSelect').value, cantidad: parseInt(document.getElementById('cantidadPrestamo').value), fecha_prestamo: document.getElementById('fechaPrestamo').value, fecha_devolucion: document.getElementById('fechaDevolucion').value, responsable: document.getElementById('responsableSelect').value, observaciones: document.getElementById('observaciones').value, id_usuario: usuarioLogueado.id };
-    const maxDisponible = document.getElementById('materialSelect').selectedOptions[0].getAttribute('data-disponibles');
-    if (!maxDisponible || prestamo.cantidad > parseInt(maxDisponible)) { alert(`Error: No puedes prestar ${prestamo.cantidad}. Solo hay ${maxDisponible || 0} disponibles.`); return; }
-    if (!prestamo.id_alumno || !prestamo.id_material) { alert("Por favor, seleccione un alumno y un material."); return; }
+    
+    // 1. Validar las fechas (Punto 3.A)
+    const maxDiasAttr = document.getElementById('materialSelect').selectedOptions[0].getAttribute('data-max-dias');
+    const maxDias = maxDiasAttr ? parseInt(maxDiasAttr) : null;
+    
+    if (!validarFechas(maxDias)) {
+        alert("Error en las fechas: revise la fecha de devolución o el límite de días.");
+        return;
+    }
+
+    // 2. Recolectar los NUEVOS datos del formulario
+    const prestamo = {
+        id_alumno: document.getElementById('alumnoSelect').value,
+        id_asignatura: document.getElementById('asignaturaSelect').value,
+        id_item: document.getElementById('itemSelect').value, // ¡El ID_ITEM!
+        fecha_prestamo: document.getElementById('fechaPrestamo').value,
+        fecha_devolucion: document.getElementById('fechaDevolucion').value,
+        responsable: document.getElementById('responsableSelect').value,
+        observaciones: document.getElementById('observaciones').value,
+        id_usuario: usuarioLogueado.id // (Sigue igual)
+    };
+
+    // 3. Validar que se haya seleccionado un ítem
+    if (!prestamo.id_item) {
+        alert("Por favor, seleccione un ítem específico (código) para prestar.");
+        return;
+    }
+    
+    // 4. Enviar a la API (al nuevo endpoint)
     try {
-        const response = await fetch(`${API_URL}/prestamos/crear`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(prestamo) });
+        const response = await fetch(`${API_URL}/prestamos/crear`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(prestamo)
+        });
+
         const data = await response.json();
-        if (!response.ok) throw new Error(data.message || 'Error al registrar el préstamo');
+        if (!response.ok) {
+            throw new Error(data.message || 'Error al registrar el préstamo');
+        }
+
+        // 5. ¡Éxito!
         alert('✅ ¡Préstamo registrado exitosamente!');
         formNuevoPrestamo.reset();
+        
+        // 6. Recargar todo
         configurarFechasPorDefecto();
-        // Recargar todo
-        cargarMaterialesSelect();
+        cargarMaterialesSelect(); // Recarga las categorías
+        cargarItemsDisponibles(null); // Limpia el selector de ítems
+        document.getElementById('fechaLimiteMsg').classList.add('d-none');
+        
+        // Recargar el resto del dashboard
+        cargarDashboardStats();
         cargarTablaPendientes();
         actualizarInventarioDisplay();
-        cargarPrestamosActivosCompletos();
-        actualizarInventarioCompleto();
-        cargarDashboardStats();
-    } catch (error) { console.error('Error al crear préstamo:', error); alert(`Error: ${error.message}`); }
+
+    } catch (error) {
+        console.error('Error al crear préstamo:', error);
+        alert(`Error: ${error.message}`);
+    }
 });
 
 // ==========================================================

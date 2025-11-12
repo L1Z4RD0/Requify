@@ -205,6 +205,7 @@
                     <div class="card-body">
                         <form id="formNuevoPrestamo">
                             <div class="row g-3">
+                            
                                 <div class="col-md-6">
                                     <label class="form-label">Seleccionar Alumno *</label>
                                     <select class="form-select" id="alumnoSelect" required>
@@ -213,21 +214,25 @@
                                 </div>
                                 
                                 <div class="col-md-6">
-                                    <label class="form-label">Tipo de Material *</label>
-                                    <select class="form-select" id="materialSelect" required>
-                                        <option value="">-- Cargando materiales... --</option>
+                                    <label class="form-label">Asignatura / Uso *</label>
+                                    <select class="form-select" id="asignaturaSelect" required>
+                                        <option value="">-- Cargando asignaturas... --</option>
                                     </select>
                                 </div>
-                                
+
                                 <div class="col-md-6">
-                                    <label class="form-label">Cantidad *</label>
-                                    <input type="number" class="form-control" id="cantidadPrestamo" min="1" value="1" required>
-                                    <small class="text-muted">Disponibles: <span id="disponiblesInfo">-</span></small>
+                                    <label class="form-label">Categoría de Material *</label>
+                                    <select class="form-select" id="materialSelect" required>
+                                        <option value="">-- Seleccione una categoría... --</option>
+                                    </select>
                                 </div>
-                                
+
                                 <div class="col-md-6">
-                                    <label class="form-label">Asignatura / Uso *</label>
-                                    <input type="text" class="form-control" id="asignatura" placeholder="Ej: Matemáticas, Educación Física" required>
+                                    <label class="form-label">Ítem Específico (Código) *</label>
+                                    <select class="form-select" id="itemSelect" required disabled>
+                                        <option value="">-- Primero seleccione una categoría --</option>
+                                    </select>
+                                    <small class="text-muted" id="itemDisponiblesInfo"></small>
                                 </div>
                                 
                                 <div class="col-md-6">
@@ -238,6 +243,8 @@
                                 <div class="col-md-6">
                                     <label class="form-label">Fecha de Devolución *</label>
                                     <input type="datetime-local" class="form-control" id="fechaDevolucion" required>
+                                    <small class="text-danger d-none" id="fechaErrorMsg">La fecha de devolución no puede ser anterior a la de préstamo.</small>
+                                    <small class="text-info d-none" id="fechaLimiteMsg">Límite de préstamo para este material: 7 días.</small>
                                 </div>
                                 
                                 <div class="col-md-12">
