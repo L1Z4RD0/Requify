@@ -36,6 +36,7 @@ window.addEventListener('load', () => {
     cargarDashboard();
     cargarActividadReciente(); // Aún no conectada, pero la dejamos lista
     cargarAlertas();
+    cargarCategoriasInventario();
 });
 
 // ==========================================================
@@ -67,6 +68,7 @@ navLinks.forEach(link => {
         // Cargar datos según la sección
         if (sectionId === 'inventario') {
             actualizarInventario();
+            cargarCategoriasInventario();
         } else if (sectionId === 'usuarios') {
             cargarUsuarios();
         } else if (sectionId === 'prestamos') {
@@ -163,6 +165,8 @@ const btnMostrarFormulario = document.getElementById('btnMostrarFormulario');
 const formularioUsuario = document.getElementById('formularioUsuario');
 const btnCancelarFormulario = document.getElementById('btnCancelarFormulario');
 const formAgregarUsuario = document.getElementById('formAgregarUsuario');
+const formNuevaCategoria = document.getElementById('formNuevaCategoria');
+const formNuevoMaterial = document.getElementById('formNuevoMaterial');
 
 btnMostrarFormulario.addEventListener('click', () => {
     formularioUsuario.style.display = 'block';
@@ -174,6 +178,67 @@ btnCancelarFormulario.addEventListener('click', () => {
     btnMostrarFormulario.style.display = 'block';
     formAgregarUsuario.reset();
 });
+
+if (formNuevaCategoria) {
+    formNuevaCategoria.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const payload = {
+            nombre: document.getElementById('nombreCategoria').value,
+            codigo_base: document.getElementById('codigoBase').value,
+            max_dias: document.getElementById('maxDiasCategoria').value,
+        };
+        try {
+            const response = await fetch(`${API_URL}/categorias`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.message || 'Error al crear categoría');
+            alert('Categoría creada correctamente');
+            formNuevaCategoria.reset();
+            document.getElementById('maxDiasCategoria').value = 7;
+            cargarCategoriasInventario();
+        } catch (error) {
+            console.error('Error al crear categoría:', error);
+            alert(`Error: ${error.message}`);
+        }
+    });
+}
+
+if (formNuevoMaterial) {
+    formNuevoMaterial.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const payload = {
+            id_categoria: document.getElementById('categoriaMaterialSelect').value,
+            nombre: document.getElementById('nombreMaterial').value,
+            descripcion: document.getElementById('descripcionMaterial').value,
+            cantidad_total: document.getElementById('cantidadMaterial').value,
+            ubicacion: document.getElementById('ubicacionMaterial').value,
+        };
+        if (!payload.id_categoria) {
+            alert('Seleccione una categoría válida.');
+            return;
+        }
+        try {
+            const response = await fetch(`${API_URL}/materiales`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(payload),
+            });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.message || 'Error al crear el material');
+            alert(`Material ${data.codigo} creado correctamente`);
+            formNuevoMaterial.reset();
+            document.getElementById('cantidadMaterial').value = 1;
+            actualizarInventario();
+            cargarCategoriasInventario();
+        } catch (error) {
+            console.error('Error al crear material:', error);
+            alert(`Error: ${error.message}`);
+        }
+    });
+}
 
 // --- ENVIAR FORMULARIO DE NUEVO USUARIO ---
 formAgregarUsuario.addEventListener('submit', async (e) => {
@@ -438,6 +503,40 @@ async function actualizarInventario() {
             </tr>
         `;
     }).join('');
+}
+
+async function cargarCategoriasInventario() {
+    const tablaCategorias = document.getElementById('tablaCategorias');
+    const selectCategorias = document.getElementById('categoriaMaterialSelect');
+    if (!tablaCategorias || !selectCategorias) { return; }
+    try {
+        const response = await fetch(`${API_URL}/categorias`);
+        if (!response.ok) throw new Error('No se pudieron cargar las categorías');
+        const categorias = await response.json();
+
+        if (categorias.length === 0) {
+            tablaCategorias.innerHTML = `<tr><td colspan="5" class="text-center text-muted">No hay categorías registradas</td></tr>`;
+        } else {
+            tablaCategorias.innerHTML = categorias.map((cat) => `
+                <tr>
+                    <td>${cat.NOMBRE_TIPO_MATERIAL}</td>
+                    <td><span class="badge bg-primary">${cat.CODIGO_BASE}</span></td>
+                    <td>${cat.MAX_DIAS_PRESTAMO} días</td>
+                    <td>${String(cat.CONSECUTIVO_ACTUAL).padStart(3, '0')}</td>
+                    <td>${cat.TOTAL_MATERIALES}</td>
+                </tr>
+            `).join('');
+        }
+
+        selectCategorias.innerHTML = '<option value="">-- Seleccione categoría --</option>';
+        categorias.forEach((cat) => {
+            selectCategorias.innerHTML += `<option value="${cat.ID_TIPO_MATERIAL}">${cat.NOMBRE_TIPO_MATERIAL} (${cat.CODIGO_BASE})</option>`;
+        });
+    } catch (error) {
+        console.error('Error cargando categorías:', error);
+        tablaCategorias.innerHTML = `<tr><td colspan="5" class="text-center text-danger">Error al cargar categorías.</td></tr>`;
+        selectCategorias.innerHTML = '<option value="">Error al cargar</option>';
+    }
 }
 
 

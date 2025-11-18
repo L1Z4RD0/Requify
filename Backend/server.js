@@ -4,6 +4,7 @@
 const express = require('express'); // El "cerebro" para crear la API
 const mysql = require('mysql2');    // El "traductor" para hablar con MySQL
 const cors = require('cors');       // El "portero" que da permiso al frontend
+const { hashPassword, comparePassword, needsRehash } = require('./utils/passwords');
 
 // ==========================================================
 // 2. CONFIGURACIÓN INICIAL
@@ -33,6 +34,11 @@ db.connect(err => {
     console.log('¡Conectado exitosamente a la base de datos Requify_Demo!');
 });
 
+const formatDateTimeForSQL = (date) => {
+    const pad = (value) => String(value).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
+};
+
 // ==========================================================
 // 4. CREAR NUESTRAS "URLS" (Endpoints)
 // ==========================================================
@@ -46,10 +52,10 @@ app.post('/login', (req, res) => {
     // Prepara la consulta SQL para buscar al usuario
     // (Usamos los campos que "parchamos" en el paso anterior)
     const sql = `
-        SELECT U.ID_USUARIO, U.USERNAME, U.NOMBRE, R.NOMBRE_ROL 
-        FROM USUARIOS U 
-        JOIN ROLES R ON U.ID_ROL = R.ID_ROL 
-        WHERE U.USERNAME = ? AND U.PASSWORD = ? AND U.ESTADO = 1
+        SELECT U.ID_USUARIO, U.USERNAME, U.NOMBRE, U.PASSWORD, R.NOMBRE_ROL
+        FROM USUARIOS U
+        JOIN ROLES R ON U.ID_ROL = R.ID_ROL
+        WHERE U.USERNAME = ? AND U.ESTADO = 1
     `;
     
     // NOTA DE SEGURIDAD: En un proyecto 100% real, las contraseñas
@@ -57,34 +63,52 @@ app.post('/login', (req, res) => {
     // Para tu proyecto de clases, esto está perfecto.
 
     // Ejecuta la consulta en la base de datos
-    db.query(sql, [username, password], (err, results) => {
+    db.query(sql, [username], async (err, results) => {
         if (err) {
             // Si la base de datos da un error
             console.error(err);
             return res.status(500).json({ message: 'Error en el servidor' });
         }
 
-        if (results.length > 0) {
-            // ¡ÉXITO! Encontramos al usuario
-            const user = results[0];
-            
-            // Determinamos a qué página redirigirlo
-            const redirect = user.NOMBRE_ROL === 'Administrador' 
-                ? 'pages/dashboard-admin.html' 
+        if (results.length === 0) {
+            return res.status(401).json({ success: false, message: 'Usuario o contraseña incorrectos' });
+        }
+
+        const user = results[0];
+        try {
+            const passwordValida = await comparePassword(password, user.PASSWORD);
+            if (!passwordValida) {
+                return res.status(401).json({ success: false, message: 'Usuario o contraseña incorrectos' });
+            }
+
+            if (needsRehash(user.PASSWORD)) {
+                try {
+                    const nuevoHash = await hashPassword(password);
+                    db.query('UPDATE USUARIOS SET PASSWORD = ? WHERE ID_USUARIO = ?', [nuevoHash, user.ID_USUARIO], (updateErr) => {
+                        if (updateErr) {
+                            console.error('Error al actualizar hash de contraseña:', updateErr);
+                        }
+                    });
+                } catch (rehashErr) {
+                    console.error('No se pudo re-encriptar la contraseña:', rehashErr);
+                }
+            }
+
+            const redirect = user.NOMBRE_ROL === 'Administrador'
+                ? 'pages/dashboard-admin.html'
                 : 'pages/dashboard-encargado.html';
 
-            res.json({
+            return res.json({
                 success: true,
-                id: user.ID_USUARIO, 
+                id: user.ID_USUARIO,
                 username: user.USERNAME,
                 nombre: user.NOMBRE,
                 rol: user.NOMBRE_ROL,
-                redirect: redirect
+                redirect
             });
-
-        } else {
-            // FALLO. No se encontró el usuario o la clave es incorrecta
-            res.status(401).json({ success: false, message: 'Usuario o contraseña incorrectos' });
+        } catch (hashErr) {
+            console.error('Error validando contraseña:', hashErr);
+            return res.status(500).json({ success: false, message: 'No se pudo validar la contraseña del usuario' });
         }
     });
 });
@@ -115,9 +139,17 @@ app.get('/api/usuarios', (req, res) => {
 // ==========================================================
 
 // --- ENDPOINT PARA CREAR USUARIO (del formulario) ---
-app.post('/api/usuarios/crear', (req, res) => {
+app.post('/api/usuarios/crear', async (req, res) => {
     // Recibe los datos del formulario desde el frontend
     const { nombre, rut, email, telefono, rol, username, password, activo } = req.body;
+
+    let hashedPassword;
+    try {
+        hashedPassword = await hashPassword(password);
+    } catch (hashError) {
+        console.error('Error al encriptar contraseña:', hashError);
+        return res.status(500).json({ message: 'No fue posible asegurar la contraseña del usuario' });
+    }
 
     // Busca el ID_ROL basado en el nombre del rol
     db.query('SELECT ID_ROL FROM ROLES WHERE NOMBRE_ROL = ?', [rol], (err, results) => {
@@ -134,7 +166,7 @@ app.post('/api/usuarios/crear', (req, res) => {
             VALUES (?, ?, ?, ?, ?, ?, NOW(), ?)
         `;
         // Nota: APELLIDO no estaba en tu form, lo ponemos vacío o lo puedes añadir luego.
-        db.query(sql, [idRol, username, nombre, email, password, estadoNum, ''], (err, result) => {
+        db.query(sql, [idRol, username, nombre, email, hashedPassword, estadoNum, ''], (err, result) => {
             if (err) {
                 // Manejar error (ej. usuario duplicado)
                 console.error(err);
@@ -170,7 +202,7 @@ app.delete('/api/usuarios/eliminar/:id', (req, res) => {
 // --- ENDPOINT PARA OBTENER TODOS LOS PRÉSTAMOS (PARA EL ADMIN) ---
 app.get('/api/prestamos', (req, res) => {
     const sql = `
-        SELECT 
+        SELECT
             S.ID_SOLICITUD,
             A.NOMBRE as ALUMNO_NOMBRE,
             A.APELLIDO as ALUMNO_APELLIDO,
@@ -180,12 +212,14 @@ app.get('/api/prestamos', (req, res) => {
             S.FECHA_SOLICITUD,
             S.FECHA_DEVOLUCION,
             S.ESTADO,
+            ASIG.NOMBRE AS ASIGNATURA,
             U.USERNAME as ENCARGADO_USERNAME
         FROM SOLICITUDES S
         JOIN ALUMNOS A ON S.ID_ALUMNO = A.ID_ALUMNO
         JOIN DETALLE_SOLICITUD DS ON S.ID_SOLICITUD = DS.ID_SOLICITUD
         JOIN MATERIALES M ON DS.ID_MATERIAL = M.ID_MATERIAL
         JOIN TIPO_MATERIALES T ON M.ID_TIPO_MATERIAL = T.ID_TIPO_MATERIAL
+        JOIN ASIGNATURAS ASIG ON S.ID_ASIGNATURA = ASIG.ID_ASIGNATURA
         JOIN USUARIOS U ON S.ID_USUARIO = U.ID_USUARIO
         ORDER BY S.FECHA_SOLICITUD DESC
     `;
@@ -222,9 +256,9 @@ app.get('/api/dashboard/admin-stats', (req, res) => {
 // --- ENDPOINT PARA EL INVENTARIO ---
 app.get('/api/inventario', (req, res) => {
     const sql = `
-        SELECT 
-            T.NOMBRE_TIPO_MATERIAL as nombre, 
-            M.CANTIDAD_TOTAL as total, 
+        SELECT
+            T.NOMBRE_TIPO_MATERIAL as nombre,
+            M.CANTIDAD_TOTAL as total,
             M.CANTIDAD_DISPONIBLE as disponibles
         FROM MATERIALES M
         JOIN TIPO_MATERIALES T ON M.ID_TIPO_MATERIAL = T.ID_TIPO_MATERIAL
@@ -235,6 +269,139 @@ app.get('/api/inventario', (req, res) => {
             return res.status(500).json({ message: 'Error al obtener inventario' });
         }
         res.json(results);
+    });
+});
+
+// --- ENDPOINT PARA CATEGORÍAS DE INVENTARIO ---
+app.get('/api/categorias', (req, res) => {
+    const sql = `
+        SELECT
+            T.ID_TIPO_MATERIAL,
+            T.NOMBRE_TIPO_MATERIAL,
+            T.CODIGO_BASE,
+            T.MAX_DIAS_PRESTAMO,
+            T.CONSECUTIVO_ACTUAL,
+            COUNT(M.ID_MATERIAL) AS TOTAL_MATERIALES
+        FROM TIPO_MATERIALES T
+        LEFT JOIN MATERIALES M ON M.ID_TIPO_MATERIAL = T.ID_TIPO_MATERIAL
+        GROUP BY T.ID_TIPO_MATERIAL
+        ORDER BY T.NOMBRE_TIPO_MATERIAL
+    `;
+    db.query(sql, (err, results) => {
+        if (err) {
+            console.error(err);
+            return res.status(500).json({ message: 'Error al obtener categorías' });
+        }
+        res.json(results);
+    });
+});
+
+// --- ENDPOINT PARA CREAR CATEGORÍA ---
+app.post('/api/categorias', (req, res) => {
+    const { nombre, codigo_base, max_dias } = req.body;
+    const nombreNormalizado = (nombre || '').trim();
+    const codigo = (codigo_base || '').trim().toUpperCase();
+    const maxDias = parseInt(max_dias, 10);
+
+    if (!nombreNormalizado || !codigo || Number.isNaN(maxDias) || maxDias <= 0) {
+        return res.status(400).json({ message: 'Nombre, código base y máximo de días son obligatorios' });
+    }
+
+    const sql = `
+        INSERT INTO TIPO_MATERIALES (NOMBRE_TIPO_MATERIAL, CODIGO_BASE, MAX_DIAS_PRESTAMO, CONSECUTIVO_ACTUAL)
+        VALUES (?, ?, ?, 0)
+    `;
+    db.query(sql, [nombreNormalizado, codigo, maxDias], (err, result) => {
+        if (err) {
+            console.error(err);
+            if (err.code === 'ER_DUP_ENTRY') {
+                return res.status(409).json({ message: 'El nombre o código base ya existen' });
+            }
+            return res.status(500).json({ message: 'Error al crear la categoría' });
+        }
+        res.status(201).json({
+            success: true,
+            id: result.insertId,
+            nombre: nombreNormalizado,
+            codigo_base: codigo,
+            max_dias: maxDias
+        });
+    });
+});
+
+// --- ENDPOINT PARA CREAR MATERIALES (con código incremental) ---
+app.post('/api/materiales', (req, res) => {
+    const { id_categoria, nombre, descripcion, cantidad_total, ubicacion } = req.body;
+    const categoriaId = parseInt(id_categoria, 10);
+    const cantidad = parseInt(cantidad_total, 10);
+    const nombreMaterial = (nombre || '').trim();
+
+    if (!categoriaId || !nombreMaterial || Number.isNaN(cantidad) || cantidad <= 0) {
+        return res.status(400).json({ message: 'Debe indicar categoría, nombre y cantidad válida' });
+    }
+
+    db.beginTransaction(err => {
+        if (err) {
+            console.error(err);
+            return res.status(500).json({ message: 'Error al preparar la transacción' });
+        }
+
+        const sqlCategoria = 'SELECT CODIGO_BASE, CONSECUTIVO_ACTUAL, MAX_DIAS_PRESTAMO FROM TIPO_MATERIALES WHERE ID_TIPO_MATERIAL = ? FOR UPDATE';
+        db.query(sqlCategoria, [categoriaId], (catErr, catResults) => {
+            if (catErr || catResults.length === 0) {
+                return db.rollback(() => {
+                    console.error(catErr);
+                    res.status(404).json({ message: 'Categoría no encontrada' });
+                });
+            }
+
+            const categoria = catResults[0];
+            const nuevoConsecutivo = categoria.CONSECUTIVO_ACTUAL + 1;
+            const correlativo = String(nuevoConsecutivo).padStart(3, '0');
+            const codigoMaterial = `${categoria.CODIGO_BASE}-${correlativo}`;
+
+            const sqlInsertMaterial = `
+                INSERT INTO MATERIALES (ID_TIPO_MATERIAL, CODIGO, NOMBRE, DESCRIPCION, CANTIDAD_TOTAL, CANTIDAD_DISPONIBLE, ESTADO, UBICACION)
+                VALUES (?, ?, ?, ?, ?, ?, 1, ?)
+            `;
+
+            db.query(sqlInsertMaterial, [categoriaId, codigoMaterial, nombreMaterial, descripcion || '', cantidad, cantidad, ubicacion || ''], (matErr, matResult) => {
+                if (matErr) {
+                    return db.rollback(() => {
+                        console.error(matErr);
+                        res.status(500).json({ message: 'Error al crear el material' });
+                    });
+                }
+
+                const sqlUpdateCategoria = 'UPDATE TIPO_MATERIALES SET CONSECUTIVO_ACTUAL = ? WHERE ID_TIPO_MATERIAL = ?';
+                db.query(sqlUpdateCategoria, [nuevoConsecutivo, categoriaId], (updateErr) => {
+                    if (updateErr) {
+                        return db.rollback(() => {
+                            console.error(updateErr);
+                            res.status(500).json({ message: 'Error al actualizar el correlativo de la categoría' });
+                        });
+                    }
+
+                    db.commit(commitErr => {
+                        if (commitErr) {
+                            return db.rollback(() => {
+                                console.error(commitErr);
+                                res.status(500).json({ message: 'Error al confirmar la creación del material' });
+                            });
+                        }
+
+                        res.status(201).json({
+                            success: true,
+                            id: matResult.insertId,
+                            codigo: codigoMaterial,
+                            nombre: nombreMaterial,
+                            max_dias: categoria.MAX_DIAS_PRESTAMO,
+                            cantidad_total: cantidad
+                        });
+                    });
+                });
+            });
+        });
     });
 });
 
@@ -272,10 +439,22 @@ app.get('/api/alumnos', (req, res) => {
     });
 });
 
+// --- ENDPOINT PARA OBTENER ASIGNATURAS ---
+app.get('/api/asignaturas', (req, res) => {
+    const sql = 'SELECT ID_ASIGNATURA, NOMBRE FROM ASIGNATURAS ORDER BY NOMBRE';
+    db.query(sql, (err, results) => {
+        if (err) {
+            console.error(err);
+            return res.status(500).json({ message: 'Error al obtener asignaturas' });
+        }
+        res.json(results);
+    });
+});
+
 // --- ENDPOINT PARA LLENAR EL <select> DE MATERIALES ---
 app.get('/api/materiales', (req, res) => {
     const sql = `
-        SELECT M.ID_MATERIAL, M.NOMBRE, M.CANTIDAD_DISPONIBLE, T.NOMBRE_TIPO_MATERIAL
+        SELECT M.ID_MATERIAL, M.CODIGO, M.NOMBRE, M.CANTIDAD_DISPONIBLE, T.NOMBRE_TIPO_MATERIAL, T.MAX_DIAS_PRESTAMO
         FROM MATERIALES M
         JOIN TIPO_MATERIALES T ON M.ID_TIPO_MATERIAL = T.ID_TIPO_MATERIAL
         WHERE M.CANTIDAD_DISPONIBLE > 0 AND M.ESTADO = 1
@@ -298,56 +477,111 @@ app.post('/api/prestamos/crear', (req, res) => {
         id_material,
         cantidad,
         id_usuario, // El ID del Encargado que está logueado
-        fecha_prestamo,
         fecha_devolucion,
+        id_asignatura,
         responsable,
         observaciones
     } = req.body;
 
-    // Usamos una TRANSACCIÓN para asegurar que todo salga bien, o nada
-    db.beginTransaction(err => {
-        if (err) { throw err; }
+    if (!id_asignatura) {
+        return res.status(400).json({ message: 'La asignatura es obligatoria para registrar el préstamo' });
+    }
 
-        // 1. Crear la SOLICITUD (el "préstamo")
-        const sqlSolicitud = `
-            INSERT INTO SOLICITUDES (ID_USUARIO, ID_ALUMNO, FECHA_SOLICITUD, ESTADO, RESPONSABLE, OBSERVACIONES, FECHA_DEVOLUCION)
-            VALUES (?, ?, ?, 1, ?, ?, ?)
-        `;
-        db.query(sqlSolicitud, [id_usuario, id_alumno, fecha_prestamo, responsable, observaciones, fecha_devolucion], (err, result) => {
-            if (err) {
-                return db.rollback(() => { console.error(err); res.status(500).json({ message: "Error al crear la solicitud" }); });
-            }
-            
-            const idSolicitud = result.insertId;
+    const cantidadSolicitada = parseInt(cantidad, 10);
+    if (!cantidadSolicitada || cantidadSolicitada <= 0) {
+        return res.status(400).json({ message: 'La cantidad solicitada debe ser un número válido' });
+    }
 
-            // 2. Crear el DETALLE de la solicitud (qué material se prestó)
-            const sqlDetalle = `
-                INSERT INTO DETALLE_SOLICITUD (ID_MATERIAL, ID_SOLICITUD, CANTIDAD_SOLICITADA, CANTIDAD_ENTREGADA)
-                VALUES (?, ?, ?, ?)
+    if (!fecha_devolucion) {
+        return res.status(400).json({ message: 'Debe indicar la fecha estimada de devolución' });
+    }
+
+    const sqlMaterialInfo = `
+        SELECT M.CANTIDAD_DISPONIBLE, T.MAX_DIAS_PRESTAMO
+        FROM MATERIALES M
+        JOIN TIPO_MATERIALES T ON M.ID_TIPO_MATERIAL = T.ID_TIPO_MATERIAL
+        WHERE M.ID_MATERIAL = ?
+    `;
+
+    db.query(sqlMaterialInfo, [id_material], (materialErr, materialResults) => {
+        if (materialErr) {
+            console.error(materialErr);
+            return res.status(500).json({ message: 'Error al validar el material seleccionado' });
+        }
+        if (materialResults.length === 0) {
+            return res.status(404).json({ message: 'El material seleccionado no existe' });
+        }
+
+        const materialInfo = materialResults[0];
+        if (materialInfo.CANTIDAD_DISPONIBLE < cantidadSolicitada) {
+            return res.status(400).json({ message: 'No hay stock suficiente para completar el préstamo' });
+        }
+
+        const fechaPrestamoServidor = new Date();
+        const fechaPrestamoSQL = formatDateTimeForSQL(fechaPrestamoServidor);
+        const fechaDevolucionDate = new Date(fecha_devolucion);
+
+        if (Number.isNaN(fechaDevolucionDate.getTime())) {
+            return res.status(400).json({ message: 'La fecha de devolución no tiene un formato válido' });
+        }
+
+        if (fechaDevolucionDate < fechaPrestamoServidor) {
+            return res.status(400).json({ message: 'La devolución no puede ser anterior a la fecha actual' });
+        }
+
+        const limiteDevolucion = new Date(fechaPrestamoServidor);
+        limiteDevolucion.setDate(limiteDevolucion.getDate() + materialInfo.MAX_DIAS_PRESTAMO);
+        if (fechaDevolucionDate > limiteDevolucion) {
+            return res.status(400).json({ message: `La categoría permite un máximo de ${materialInfo.MAX_DIAS_PRESTAMO} días para este préstamo` });
+        }
+
+        const fechaDevolucionSQL = formatDateTimeForSQL(fechaDevolucionDate);
+
+        // Usamos una TRANSACCIÓN para asegurar que todo salga bien, o nada
+        db.beginTransaction(err => {
+            if (err) { throw err; }
+
+            // 1. Crear la SOLICITUD (el "préstamo")
+            const sqlSolicitud = `
+                INSERT INTO SOLICITUDES (ID_USUARIO, ID_ALUMNO, ID_ASIGNATURA, FECHA_SOLICITUD, ESTADO, RESPONSABLE, OBSERVACIONES, FECHA_DEVOLUCION)
+                VALUES (?, ?, ?, ?, 1, ?, ?, ?)
             `;
-            // Asumimos que se entrega la misma cantidad que se solicita
-            db.query(sqlDetalle, [id_material, idSolicitud, cantidad, cantidad], (err, result) => {
+            db.query(sqlSolicitud, [id_usuario, id_alumno, id_asignatura, fechaPrestamoSQL, responsable, observaciones, fechaDevolucionSQL], (err, result) => {
                 if (err) {
-                    return db.rollback(() => { console.error(err); res.status(500).json({ message: "Error al crear el detalle" }); });
+                    return db.rollback(() => { console.error(err); res.status(500).json({ message: "Error al crear la solicitud" }); });
                 }
 
-                // 3. ACTUALIZAR el inventario (restar la cantidad)
-                const sqlUpdateInventario = `
-                    UPDATE MATERIALES 
-                    SET CANTIDAD_DISPONIBLE = CANTIDAD_DISPONIBLE - ? 
-                    WHERE ID_MATERIAL = ?
+                const idSolicitud = result.insertId;
+
+                // 2. Crear el DETALLE de la solicitud (qué material se prestó)
+                const sqlDetalle = `
+                    INSERT INTO DETALLE_SOLICITUD (ID_MATERIAL, ID_SOLICITUD, CANTIDAD_SOLICITADA, CANTIDAD_ENTREGADA)
+                    VALUES (?, ?, ?, ?)
                 `;
-                db.query(sqlUpdateInventario, [cantidad, id_material], (err, result) => {
+                // Asumimos que se entrega la misma cantidad que se solicita
+                db.query(sqlDetalle, [id_material, idSolicitud, cantidadSolicitada, cantidadSolicitada], (err, result) => {
                     if (err) {
-                        return db.rollback(() => { console.error(err); res.status(500).json({ message: "Error al actualizar inventario" }); });
+                        return db.rollback(() => { console.error(err); res.status(500).json({ message: "Error al crear el detalle" }); });
                     }
 
-                    // 4. Si todo salió bien, CONFIRMAR la transacción
-                    db.commit(err => {
+                    // 3. ACTUALIZAR el inventario (restar la cantidad)
+                    const sqlUpdateInventario = `
+                        UPDATE MATERIALES
+                        SET CANTIDAD_DISPONIBLE = CANTIDAD_DISPONIBLE - ?
+                        WHERE ID_MATERIAL = ?
+                    `;
+                    db.query(sqlUpdateInventario, [cantidadSolicitada, id_material], (err, result) => {
                         if (err) {
-                            return db.rollback(() => { console.error(err); res.status(500).json({ message: "Error al confirmar" }); });
+                            return db.rollback(() => { console.error(err); res.status(500).json({ message: "Error al actualizar inventario" }); });
                         }
-                        res.status(201).json({ success: true, message: "¡Préstamo registrado exitosamente!" });
+
+                        // 4. Si todo salió bien, CONFIRMAR la transacción
+                        db.commit(err => {
+                            if (err) {
+                                return db.rollback(() => { console.error(err); res.status(500).json({ message: "Error al confirmar" }); });
+                            }
+                            res.status(201).json({ success: true, message: "¡Préstamo registrado exitosamente!" });
+                        });
                     });
                 });
             });
@@ -363,7 +597,7 @@ app.get('/api/prestamos/activos/:id_usuario', (req, res) => {
     const { id_usuario } = req.params;
 
     const sql = `
-        SELECT 
+        SELECT
             S.ID_SOLICITUD,
             DS.ID_DETALLE,    /* <-- AÑADIDO */
             M.ID_MATERIAL,    /* <-- AÑADIDO */
@@ -372,6 +606,7 @@ app.get('/api/prestamos/activos/:id_usuario', (req, res) => {
             A.CURSO,
             M.NOMBRE as MATERIAL_NOMBRE,
             T.NOMBRE_TIPO_MATERIAL,
+            ASIG.NOMBRE AS ASIGNATURA,
             DS.CANTIDAD_ENTREGADA as CANTIDAD,
             S.FECHA_SOLICITUD,
             S.FECHA_DEVOLUCION
@@ -380,6 +615,7 @@ app.get('/api/prestamos/activos/:id_usuario', (req, res) => {
         JOIN DETALLE_SOLICITUD DS ON S.ID_SOLICITUD = DS.ID_SOLICITUD
         JOIN MATERIALES M ON DS.ID_MATERIAL = M.ID_MATERIAL
         JOIN TIPO_MATERIALES T ON M.ID_TIPO_MATERIAL = T.ID_TIPO_MATERIAL
+        JOIN ASIGNATURAS ASIG ON S.ID_ASIGNATURA = ASIG.ID_ASIGNATURA
         WHERE S.ESTADO = 1 AND S.ID_USUARIO = ?
         ORDER BY S.FECHA_DEVOLUCION ASC
     `;
@@ -453,12 +689,13 @@ app.get('/api/prestamos/historial/:id_usuario', (req, res) => {
 
     // Es casi igual al del Admin, pero con un "WHERE" para el ID del usuario
     const sql = `
-        SELECT 
+        SELECT
             S.ID_SOLICITUD,
             A.NOMBRE as ALUMNO_NOMBRE,
             A.APELLIDO as ALUMNO_APELLIDO,
             M.NOMBRE as MATERIAL_NOMBRE,
             T.NOMBRE_TIPO_MATERIAL,
+            ASIG.NOMBRE AS ASIGNATURA,
             DS.CANTIDAD_ENTREGADA as CANTIDAD,
             S.FECHA_SOLICITUD,
             S.FECHA_DEVOLUCION,
@@ -468,6 +705,7 @@ app.get('/api/prestamos/historial/:id_usuario', (req, res) => {
         JOIN DETALLE_SOLICITUD DS ON S.ID_SOLICITUD = DS.ID_SOLICITUD
         JOIN MATERIALES M ON DS.ID_MATERIAL = M.ID_MATERIAL
         JOIN TIPO_MATERIALES T ON M.ID_TIPO_MATERIAL = T.ID_TIPO_MATERIAL
+        JOIN ASIGNATURAS ASIG ON S.ID_ASIGNATURA = ASIG.ID_ASIGNATURA
         WHERE S.ID_USUARIO = ?
         ORDER BY S.FECHA_SOLICITUD DESC
     `;

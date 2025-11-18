@@ -227,17 +227,21 @@
                                 
                                 <div class="col-md-6">
                                     <label class="form-label">Asignatura / Uso *</label>
-                                    <input type="text" class="form-control" id="asignatura" placeholder="Ej: Matemáticas, Educación Física" required>
+                                    <select class="form-select" id="asignaturaSelect" required>
+                                        <option value="">-- Cargando asignaturas... --</option>
+                                    </select>
                                 </div>
                                 
                                 <div class="col-md-6">
                                     <label class="form-label">Fecha de Préstamo *</label>
-                                    <input type="datetime-local" class="form-control" id="fechaPrestamo" required>
+                                    <input type="datetime-local" class="form-control bg-light" id="fechaPrestamo" required readonly>
+                                    <small class="text-muted">Se completa automáticamente con la fecha y hora actuales.</small>
                                 </div>
-                                
+
                                 <div class="col-md-6">
                                     <label class="form-label">Fecha de Devolución *</label>
                                     <input type="datetime-local" class="form-control" id="fechaDevolucion" required>
+                                    <small id="mensajeLimiteFecha" class="text-muted d-block mt-1">Seleccione un material para conocer el límite máximo.</small>
                                 </div>
                                 
                                 <div class="col-md-12">
