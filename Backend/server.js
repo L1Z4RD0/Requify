@@ -22,7 +22,7 @@ const db = mysql.createConnection({
     port: '3306',
     user: 'root',
     password: 'BB21JhonWick', 
-    database: 'Requify_Demo',
+    database: 'requify_demoV0.2',
     multipleStatements: true
 });
 
@@ -447,7 +447,11 @@ app.post('/api/prestamos/crear', (req, res) => {
 
 // --- DEVOLVER PRÉSTAMO (Encargado - v3.0) ---
 app.post('/api/prestamos/devolver', (req, res) => {
-    const { id_solicitud, id_detalle, id_item, id_usuario_encargado, estado_material, observaciones, fecha_recepcion } = req.body;
+    const { id_solicitud, id_detalle, id_item, estado_material, observaciones, fecha_recepcion } = req.body;
+
+    const id_usuario_encargado = parseInt(req.body.id_usuario_encargado);
+
+    console.log("DATOS RECIBIDOS PARA DEVOLUCIÓN:", req.body);
     
     db.beginTransaction(err => {
         if (err) { throw err; }
