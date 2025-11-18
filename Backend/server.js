@@ -54,18 +54,20 @@ function formatToMySQLDatetime(value) {
 // ==========================================================
 // 3. CONEXIÓN A LA BASE DE DATOS 
 // ==========================================================
-const db = mysql.createConnection({
-    host: '127.0.0.1',
-    port: '3306',
-    user: 'root',
-    password: 'BB21JhonWick', 
-    database: 'Requify_Demo',
+const dbConfig = {
+    host: process.env.DB_HOST || '127.0.0.1',
+    port: process.env.DB_PORT || '3306',
+    user: process.env.DB_USER || 'root',
+    password: process.env.DB_PASSWORD || 'BB21JhonWick',
+    database: process.env.DB_NAME || 'requify_demoV0.2',
     multipleStatements: true
-});
+};
+
+const db = mysql.createConnection(dbConfig);
 
 db.connect(err => {
     if (err) { console.error('Error al conectar a la base de datos:', err); return; }
-    console.log('¡Conectado exitosamente a la base de datos Requify_Demo v3.1 (Bcrypt)!');
+    console.log(`¡Conectado exitosamente a la base de datos ${dbConfig.database}!`);
 });
 
 // ==========================================================
