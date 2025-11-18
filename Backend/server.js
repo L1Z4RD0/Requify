@@ -14,6 +14,43 @@ app.use(cors());
 app.use(express.json());
 const saltRounds = 10; // (Para bcrypt)
 
+// Helper para normalizar fechas provenientes del frontend (datetime-local)
+function formatToMySQLDatetime(value) {
+    if (!value) return null;
+
+    // Si ya es un objeto Date lo convertimos directo a ISO sin la "T"
+    if (value instanceof Date) {
+        return value.toISOString().slice(0, 19).replace('T', ' ');
+    }
+
+    if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if (!trimmed) return null;
+
+        let normalized = trimmed.replace('T', ' ');
+
+        // Si viene en formato YYYY-MM-DD HH:MM añadimos los segundos
+        if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/.test(normalized)) {
+            normalized = `${normalized}:00`;
+        }
+
+        // Si ya cumple con el formato completo, lo retornamos
+        if (/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(normalized)) {
+            return normalized;
+        }
+
+        // Intentamos parsear cualquier otro formato válido
+        const parsedDate = new Date(trimmed);
+        if (!isNaN(parsedDate)) {
+            return parsedDate.toISOString().slice(0, 19).replace('T', ' ');
+        }
+
+        return normalized;
+    }
+
+    return null;
+}
+
 // ==========================================================
 // 3. CONEXIÓN A LA BASE DE DATOS 
 // ==========================================================
@@ -420,13 +457,15 @@ app.get('/api/prestamos/historial/:id_usuario', (req, res) => {
 // --- CREAR PRÉSTAMO (Encargado - v3.0) ---
 app.post('/api/prestamos/crear', (req, res) => {
     const { id_alumno, id_asignatura, id_item, id_usuario, fecha_prestamo, fecha_devolucion, responsable, observaciones } = req.body;
+    const fechaSolicitudSQL = formatToMySQLDatetime(fecha_prestamo) || formatToMySQLDatetime(new Date());
+    const fechaDevolucionSQL = formatToMySQLDatetime(fecha_devolucion) || formatToMySQLDatetime(new Date());
     db.beginTransaction(err => {
         if (err) { throw err; }
         const sqlSolicitud = `
             INSERT INTO SOLICITUDES (ID_USUARIO, ID_ALUMNO, FECHA_SOLICITUD, ESTADO, RESPONSABLE, OBSERVACIONES, FECHA_DEVOLUCION, ID_ASIGNATURA)
             VALUES (?, ?, ?, 1, ?, ?, ?, ?)
         `;
-        db.query(sqlSolicitud, [id_usuario, id_alumno, fecha_prestamo, responsable, observaciones, fecha_devolucion, id_asignatura], (err, result) => {
+        db.query(sqlSolicitud, [id_usuario, id_alumno, fechaSolicitudSQL, responsable, observaciones, fechaDevolucionSQL, id_asignatura], (err, result) => {
             if (err) { return db.rollback(() => { console.error(err); res.status(500).json({ message: "Error al crear la solicitud" }); }); }
             const idSolicitud = result.insertId;
             const sqlDetalle = `INSERT INTO DETALLE_SOLICITUD (ID_SOLICITUD, ID_ITEM) VALUES (?, ?)`;
@@ -448,7 +487,8 @@ app.post('/api/prestamos/crear', (req, res) => {
 // --- DEVOLVER PRÉSTAMO (Encargado - v3.0) ---
 app.post('/api/prestamos/devolver', (req, res) => {
     const { id_solicitud, id_detalle, id_item, id_usuario_encargado, estado_material, observaciones, fecha_recepcion } = req.body;
-    
+    const fechaRecepcionSQL = formatToMySQLDatetime(fecha_recepcion) || formatToMySQLDatetime(new Date());
+
     db.beginTransaction(err => {
         if (err) { throw err; }
         // 1. Actualizar SOLICITUD (Estado 2 = Completado)
@@ -467,7 +507,7 @@ app.post('/api/prestamos/devolver', (req, res) => {
                     INSERT INTO RECEPCIONES_MATERIAL (ID_DETALLE, ID_USUARIO, ESTADO_MATERIAL, OBSERVACIONES, FECHA_RECEPCION)
                     VALUES (?, ?, ?, ?, ?)
                 `;
-                db.query(sqlRecepcion, [id_detalle, id_usuario_encargado, estado_material, observaciones, fecha_recepcion], (err, result) => {
+                db.query(sqlRecepcion, [id_detalle, id_usuario_encargado, estado_material, observaciones, fechaRecepcionSQL], (err, result) => {
                     if (err) { return db.rollback(() => { console.error(err); res.status(500).json({ message: "Error al crear la recepción" }); }); }
 
                     // 4. Actualizar el DETALLE_SOLICITUD
