@@ -7,6 +7,10 @@ const API_URL = 'http://localhost:3000/api';
 let usuarioLogueado = {};
 let prestamoADevolver = {};
 const modalDevolverBootstrap = new bootstrap.Modal(document.getElementById('modalDevolver'));
+const materialSelect = document.getElementById('materialSelect');
+const itemSelect = document.getElementById('itemSelect');
+const ubicacionMaterialInfo = document.getElementById('ubicacionMaterialInfo');
+const itemsDisponiblesInfo = document.getElementById('itemsDisponiblesInfo');
 
 // ==========================================================
 // AL CARGAR LA PÁGINA (load)
@@ -127,26 +131,75 @@ async function cargarAlumnosSelect() { /* (Sin cambios) */
         alumnos.forEach(alumno => { select.innerHTML += `<option value="${alumno.ID_ALUMNO}">${alumno.NOMBRE} ${alumno.APELLIDO} (${alumno.RUT} - ${alumno.CURSO})</option>`; });
     } catch (error) { console.error('Error cargando alumnos:', error); select.innerHTML = '<option value="">Error al cargar alumnos</option>'; }
 }
-async function cargarMaterialesSelect() { /* (Sin cambios) */
-    const select = document.getElementById('materialSelect');
+async function cargarMaterialesSelect() {
     try {
         const response = await fetch(`${API_URL}/materiales`);
         if (!response.ok) throw new Error('Respuesta de red no fue OK');
         const materiales = await response.json();
-        select.innerHTML = '<option value="">-- Seleccione material --</option>';
+        materialSelect.innerHTML = '<option value="">-- Seleccione material --</option>';
         materiales.forEach(mat => {
-            select.innerHTML += `<option value="${mat.ID_MATERIAL}" data-disponibles="${mat.CANTIDAD_DISPONIBLE}" data-max-dias="${mat.MAX_DIAS_PRESTAMO}">${mat.NOMBRE_TIPO_MATERIAL} - ${mat.NOMBRE} (${mat.CODIGO}) (Disp: ${mat.CANTIDAD_DISPONIBLE})</option>`;
+            const option = document.createElement('option');
+            option.value = mat.ID_MATERIAL;
+            option.textContent = `${mat.NOMBRE_TIPO_MATERIAL} - ${mat.NOMBRE} (${mat.CODIGO}) [Disp: ${mat.DISPONIBLES}]`;
+            option.dataset.maxDias = mat.MAX_DIAS_PRESTAMO;
+            option.dataset.ubicacion = mat.UBICACION || '-';
+            materialSelect.appendChild(option);
         });
-    } catch (error) { console.error('Error cargando materiales:', error); select.innerHTML = '<option value="">Error al cargar materiales</option>'; }
+        itemSelect.innerHTML = '<option value="">Seleccione un material para ver ítems...</option>';
+        itemSelect.disabled = true;
+        ubicacionMaterialInfo.textContent = '-';
+        itemsDisponiblesInfo.textContent = '0';
+    } catch (error) {
+        console.error('Error cargando materiales:', error);
+        materialSelect.innerHTML = '<option value="">Error al cargar materiales</option>';
+        itemSelect.innerHTML = '<option value="">Sin datos</option>';
+        itemSelect.disabled = true;
+    }
 }
-document.getElementById('materialSelect').addEventListener('change', (e) => { /* (Sin cambios) */
+
+materialSelect.addEventListener('change', async (e) => {
     const opcionSeleccionada = e.target.selectedOptions[0];
-    const disponibles = opcionSeleccionada.getAttribute('data-disponibles') || '-';
-    document.getElementById('disponiblesInfo').textContent = disponibles;
-    document.getElementById('cantidadPrestamo').max = disponibles;
-    const maxDias = opcionSeleccionada.getAttribute('data-max-dias');
+    const maxDias = opcionSeleccionada?.dataset?.maxDias;
+    const ubicacion = opcionSeleccionada?.dataset?.ubicacion || '-';
+    ubicacionMaterialInfo.textContent = ubicacion;
+    if (!e.target.value) {
+        itemSelect.innerHTML = '<option value="">Seleccione un material para ver ítems...</option>';
+        itemSelect.disabled = true;
+        itemsDisponiblesInfo.textContent = '0';
+        actualizarLimiteDevolucion(null);
+        return;
+    }
+    await cargarItemsDisponibles(e.target.value);
     actualizarLimiteDevolucion(maxDias);
 });
+
+async function cargarItemsDisponibles(idMaterial) {
+    itemSelect.disabled = true;
+    itemSelect.innerHTML = '<option value="">Cargando ítems...</option>';
+    try {
+        const response = await fetch(`${API_URL}/materiales/${idMaterial}/items-disponibles`);
+        if (!response.ok) throw new Error('No se pudieron cargar los ítems');
+        const items = await response.json();
+        if (items.length === 0) {
+            itemSelect.innerHTML = '<option value="">Sin ítems disponibles</option>';
+            itemsDisponiblesInfo.textContent = '0';
+            return;
+        }
+        itemSelect.innerHTML = '<option value="">-- Seleccione ítem --</option>';
+        items.forEach(item => {
+            const option = document.createElement('option');
+            option.value = item.ID_ITEM;
+            option.textContent = `${item.CODIGO_ITEM} (${item.UBICACION_ITEM || 'Sin ubicación'})`;
+            itemSelect.appendChild(option);
+        });
+        itemsDisponiblesInfo.textContent = items.length;
+        itemSelect.disabled = false;
+    } catch (error) {
+        console.error('Error cargando ítems:', error);
+        itemSelect.innerHTML = '<option value="">Error al cargar ítems</option>';
+        itemsDisponiblesInfo.textContent = '0';
+    }
+}
 
 // ==========================================================
 // CARGAR TABLAS Y ESTADÍSTICAS
@@ -184,7 +237,7 @@ async function cargarTablaPendientes() {
             const tr = document.createElement('tr');
             tr.innerHTML = `
                 <td>${p.ALUMNO_NOMBRE} ${p.ALUMNO_APELLIDO}</td>
-                <td>${p.MATERIAL_NOMBRE} (${p.CANTIDAD})</td>
+                <td>${p.MATERIAL_NOMBRE} <span class="badge bg-light text-dark">${p.CODIGO_ITEM}</span></td>
                 <td>${formatearFecha(p.FECHA_DEVOLUCION)}</td>
                 <td><span class="badge ${estadoInfo.badge}">${estadoInfo.texto}</span></td>
             `;
@@ -200,8 +253,9 @@ async function cargarTablaPendientes() {
                 id_solicitud: p.ID_SOLICITUD,
                 id_detalle: p.ID_DETALLE,
                 id_material: p.ID_MATERIAL,
-                cantidad: p.CANTIDAD,
-                alumno: `${p.ALUMNO_NOMBRE} ${p.ALUMNO_APELLIDO}`, // ¡Aquí el nombre con 'López' está seguro!
+                id_item: p.ID_ITEM,
+                codigo_item: p.CODIGO_ITEM,
+                alumno: `${p.ALUMNO_NOMBRE} ${p.ALUMNO_APELLIDO}`,
                 material: p.MATERIAL_NOMBRE
             };
 
@@ -237,14 +291,14 @@ async function cargarPrestamosActivosCompletos() {
 
         prestamos.forEach((p, index) => {
             const estadoInfo = getEstadoPrestamo(p.FECHA_DEVOLUCION);
-            
+
             // 1. Creamos la fila y las celdas de datos
             const tr = document.createElement('tr');
             tr.innerHTML = `
                 <td>#${p.ID_SOLICITUD}</td>
                 <td><strong>${p.ALUMNO_NOMBRE} ${p.ALUMNO_APELLIDO}</strong><br><small class="text-muted">${p.CURSO}</small></td>
                 <td>${p.MATERIAL_NOMBRE}</td>
-                <td><span class="badge bg-info">${p.CANTIDAD}</span></td>
+                <td><span class="badge bg-info text-dark">${p.CODIGO_ITEM}</span></td>
                 <td>${formatearFecha(p.FECHA_SOLICITUD)}</td>
                 <td>${formatearFecha(p.FECHA_DEVOLUCION)}</td>
                 <td><span class="badge ${estadoInfo.badge}">${estadoInfo.texto}</span></td>
@@ -265,7 +319,8 @@ async function cargarPrestamosActivosCompletos() {
                 id_solicitud: p.ID_SOLICITUD,
                 id_detalle: p.ID_DETALLE,
                 id_material: p.ID_MATERIAL,
-                cantidad: p.CANTIDAD,
+                id_item: p.ID_ITEM,
+                codigo_item: p.CODIGO_ITEM,
                 alumno: `${p.ALUMNO_NOMBRE} ${p.ALUMNO_APELLIDO}`, // Seguro
                 material: p.MATERIAL_NOMBRE
             };
@@ -334,24 +389,21 @@ formNuevoPrestamo.addEventListener('submit', async (e) => {
     e.preventDefault();
     const prestamo = {
         id_alumno: document.getElementById('alumnoSelect').value,
-        id_material: document.getElementById('materialSelect').value,
+        id_item: itemSelect.value,
         id_asignatura: document.getElementById('asignaturaSelect').value,
-        cantidad: parseInt(document.getElementById('cantidadPrestamo').value),
         fecha_prestamo: document.getElementById('fechaPrestamo').value,
         fecha_devolucion: document.getElementById('fechaDevolucion').value,
         responsable: document.getElementById('responsableSelect').value,
         observaciones: document.getElementById('observaciones').value,
         id_usuario: usuarioLogueado.id
     };
-    const maxDisponible = document.getElementById('materialSelect').selectedOptions[0].getAttribute('data-disponibles');
-    if (!maxDisponible || prestamo.cantidad > parseInt(maxDisponible)) { alert(`Error: No puedes prestar ${prestamo.cantidad}. Solo hay ${maxDisponible || 0} disponibles.`); return; }
-    if (!prestamo.id_alumno || !prestamo.id_material) { alert("Por favor, seleccione un alumno y un material."); return; }
+    if (!prestamo.id_alumno || !prestamo.id_item) { alert("Por favor, seleccione un alumno y un ítem disponible."); return; }
     if (!prestamo.id_asignatura) { alert('Por favor, seleccione una asignatura.'); return; }
     if (!prestamo.fecha_devolucion) { alert('Debe indicar la fecha estimada de devolución.'); return; }
     const fechaPrestamo = new Date(prestamo.fecha_prestamo);
     const fechaDevolucion = new Date(prestamo.fecha_devolucion);
     if (fechaDevolucion < fechaPrestamo) { alert('La fecha de devolución no puede ser anterior a la fecha de préstamo.'); return; }
-    const maxDiasPermitidos = parseInt(document.getElementById('materialSelect').selectedOptions[0].getAttribute('data-max-dias') || '0', 10);
+    const maxDiasPermitidos = parseInt(materialSelect.selectedOptions[0]?.dataset?.maxDias || '0', 10);
     if (maxDiasPermitidos) {
         const diasSolicitados = Math.ceil((fechaDevolucion - fechaPrestamo) / (1000 * 60 * 60 * 24));
         if (diasSolicitados > maxDiasPermitidos) {
@@ -382,7 +434,7 @@ formNuevoPrestamo.addEventListener('submit', async (e) => {
 function abrirModalDevolver(prestamo) {
     prestamoADevolver = prestamo;
     const infoPrestamo = document.getElementById('infoPrestamo');
-    infoPrestamo.innerHTML = `<div class="alert alert-info"><strong>Alumno:</strong> ${prestamo.alumno}<br><strong>Material:</strong> ${prestamo.material} (${prestamo.cantidad})</div>`;
+    infoPrestamo.innerHTML = `<div class="alert alert-info"><strong>Alumno:</strong> ${prestamo.alumno}<br><strong>Material:</strong> ${prestamo.material}<br><strong>Ítem:</strong> ${prestamo.codigo_item}</div>`;
     const ahora = new Date();
     ahora.setMinutes(ahora.getMinutes() - ahora.getTimezoneOffset());
     document.getElementById('fechaDevolucionReal').value = ahora.toISOString().slice(0, 16);
@@ -393,7 +445,7 @@ function abrirModalDevolver(prestamo) {
 
 async function confirmarDevolucion() {
     const devolucion = { estado_material: document.getElementById('estadoMaterial').value, observaciones: document.getElementById('observacionesDevolucion').value, fecha_recepcion: document.getElementById('fechaDevolucionReal').value };
-    const datosCompletos = { ...prestamoADevolver, id_usuario_encargado: usuarioLogueado.id, cantidad_recibida: prestamoADevolver.cantidad, ...devolucion };
+    const datosCompletos = { ...prestamoADevolver, id_usuario_encargado: usuarioLogueado.id, ...devolucion };
     if (!devolucion.fecha_recepcion) { alert('Por favor ingrese la fecha de devolución'); return; }
     try {
         const response = await fetch(`${API_URL}/prestamos/devolver`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(datosCompletos) });
@@ -448,15 +500,11 @@ async function cargarHistorial() {
                     <td>#${p.ID_SOLICITUD}</td>
                     <td>${p.ALUMNO_NOMBRE} ${p.ALUMNO_APELLIDO}</td>
                     <td>${p.MATERIAL_NOMBRE}</td>
-                    <td><span class="badge bg-info">${p.CANTIDAD}</span></td>
+                    <td><span class="badge bg-info text-dark">${p.CODIGO_ITEM}</span></td>
                     <td>${formatearFecha(p.FECHA_SOLICITUD)}</td>
                     <td>${formatearFecha(p.FECHA_DEVOLUCION)}</td>
                     <td><span class="badge ${estadoBadge}">${estadoTexto}</span></td>
-                    <td>
-                        <button class="btn btn-sm btn-info" onclick="verDetallePrestamo(${p.ID_SOLICITUD})">
-                            <i class="fas fa-eye"></i>
-                        </button>
-                    </td>
+                    <td>${p.NOMBRE_USUARIO || '-'}</td>
                 </tr>
             `;
         }).join('');

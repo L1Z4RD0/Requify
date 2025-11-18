@@ -7,6 +7,7 @@ SET FOREIGN_KEY_CHECKS = 0;
 -- Borrar tablas si existen
 DROP TABLE IF EXISTS RECEPCIONES_MATERIAL;
 DROP TABLE IF EXISTS DETALLE_SOLICITUD;
+DROP TABLE IF EXISTS ITEMS_MATERIALES;
 DROP TABLE IF EXISTS HISTORIAL_ESTADOS;
 DROP TABLE IF EXISTS SOLICITUDES;
 DROP TABLE IF EXISTS MATERIALES;
@@ -15,6 +16,7 @@ DROP TABLE IF EXISTS USUARIOS;
 DROP TABLE IF EXISTS ROLES;
 DROP TABLE IF EXISTS ALUMNOS;
 DROP TABLE IF EXISTS ASIGNATURAS;
+DROP TABLE IF EXISTS UBICACIONES;
 
 -- ============================================
 -- 1. TABLA: ROLES
@@ -77,6 +79,19 @@ CREATE TABLE MATERIALES (
 );
 
 -- ============================================
+-- 4b. TABLA: ITEMS_MATERIALES
+-- ============================================
+CREATE TABLE ITEMS_MATERIALES (
+   ID_ITEM INT AUTO_INCREMENT PRIMARY KEY,
+   ID_MATERIAL INT NOT NULL,
+   CODIGO_ITEM VARCHAR(20) NOT NULL UNIQUE,
+   ESTADO_ITEM INT DEFAULT 1,
+   UBICACION_ITEM VARCHAR(100),
+   FECHA_ALTA DATETIME DEFAULT NOW(),
+   CONSTRAINT FK_ITEM_MATERIAL FOREIGN KEY (ID_MATERIAL) REFERENCES MATERIALES(ID_MATERIAL)
+);
+
+-- ============================================
 -- 5. TABLA: ALUMNOS
 -- ============================================
 CREATE TABLE ALUMNOS (
@@ -85,6 +100,7 @@ CREATE TABLE ALUMNOS (
    NOMBRE VARCHAR(150),
    APELLIDO VARCHAR(60),
    CURSO VARCHAR(50),
+   MAX_PRESTAMOS INT DEFAULT 3,
    PRIMARY KEY (ID_ALUMNO)
 );
 
@@ -96,6 +112,14 @@ CREATE TABLE ASIGNATURAS (
    NOMBRE VARCHAR(100) NOT NULL,
    PRIMARY KEY (ID_ASIGNATURA),
    UNIQUE KEY UK_ASIGNATURA_NOMBRE (NOMBRE)
+);
+
+-- ============================================
+-- 6b. TABLA: UBICACIONES
+-- ============================================
+CREATE TABLE UBICACIONES (
+   ID_UBICACION INT AUTO_INCREMENT PRIMARY KEY,
+   NOMBRE VARCHAR(100) NOT NULL UNIQUE
 );
 
 -- ============================================
@@ -123,14 +147,12 @@ CREATE TABLE SOLICITUDES (
 CREATE TABLE DETALLE_SOLICITUD (
    ID_DETALLE INT NOT NULL AUTO_INCREMENT,
    ID_SOLICITUD INT NOT NULL,
-   ID_MATERIAL INT NOT NULL,
-   CANTIDAD_SOLICITADA INT,
-   CANTIDAD_ENTREGADA INT,
+   ID_ITEM INT NOT NULL,
    ESTADO_DEVOLUCION VARCHAR(100),
    OBSERVACIONES_DEVOLUCION TEXT,
    PRIMARY KEY (ID_DETALLE),
    CONSTRAINT FK_DET_SOL FOREIGN KEY (ID_SOLICITUD) REFERENCES SOLICITUDES(ID_SOLICITUD),
-   CONSTRAINT FK_DET_MAT FOREIGN KEY (ID_MATERIAL) REFERENCES MATERIALES(ID_MATERIAL)
+   CONSTRAINT FK_ITEM_ASOCIADO FOREIGN KEY (ID_ITEM) REFERENCES ITEMS_MATERIALES(ID_ITEM)
 );
 
 -- ============================================
@@ -140,6 +162,7 @@ CREATE TABLE RECEPCIONES_MATERIAL (
    ID_RECEPCION INT NOT NULL AUTO_INCREMENT,
    ID_DETALLE INT NOT NULL,
    ID_USUARIO INT NOT NULL,
+   NOMBRE_USUARIO VARCHAR(150),
    CANTIDAD_RECIBIDA INT,
    ESTADO_MATERIAL VARCHAR(100),
    OBSERVACIONES TEXT,
@@ -173,22 +196,98 @@ INSERT INTO ROLES (NOMBRE_ROL) VALUES
 
 -- Tipos de Materiales (Categorías)
 INSERT INTO TIPO_MATERIALES (NOMBRE_TIPO_MATERIAL, CODIGO_BASE, MAX_DIAS_PRESTAMO, CONSECUTIVO_ACTUAL) VALUES
-('Tablets', 'TAB', 7, 1),
-('Notebooks', 'NBK', 10, 1),
-('Libros', 'LIB', 21, 1),
-('Material Deportivo', 'DEP', 5, 1);
+('Tablets', 'TAB', 7, 20),
+('Notebooks', 'NBK', 10, 100),
+('Libros', 'LIB', 21, 50),
+('Material Deportivo', 'DEP', 5, 30);
+
+-- Ubicaciones iniciales
+INSERT INTO UBICACIONES (NOMBRE) VALUES
+('Bodega A-1'),
+('Biblioteca'),
+('Laboratorio'),
+('Gimnasio'),
+('Dirección'),
+('Carro B-1');
 
 -- Materiales
 INSERT INTO MATERIALES (ID_TIPO_MATERIAL, CODIGO, NOMBRE, CANTIDAD_TOTAL, CANTIDAD_DISPONIBLE, ESTADO, UBICACION) VALUES
-(1, 'TAB-001', 'Tablet Samsung Galaxy Tab A8', 20, 20, 1, 'Bodega A-1'),
-(2, 'NBK-001', 'Notebook HP 14-dq2055wm', 100, 100, 1, 'Carro B-1'),
-(3, 'LIB-001', 'Libro "El Quijote"', 50, 50, 1, 'Biblioteca'),
-(4, 'DEP-001', 'Balón de Fútbol N°5', 30, 30, 1, 'Gimnasio');
+(1, 'TAB-L001', 'Tablet Samsung Galaxy Tab A8', 20, 20, 1, 'Bodega A-1'),
+(2, 'NBK-L001', 'Notebook HP 14-dq2055wm', 100, 100, 1, 'Carro B-1'),
+(3, 'LIB-L001', 'Libro "El Quijote"', 50, 50, 1, 'Biblioteca'),
+(4, 'DEP-L001', 'Balón de Fútbol N°5', 30, 30, 1, 'Gimnasio');
 
 -- Alumnos
-INSERT INTO ALUMNOS (RUT, NOMBRE, APELLIDO, CURSO) VALUES
-('12.345.678-9', 'Diego', 'Soto', '8° A'),
-('23.456.789-0', 'María', 'Castillo', '7° B');
+INSERT INTO ALUMNOS (RUT, NOMBRE, APELLIDO, CURSO, MAX_PRESTAMOS) VALUES
+('12.345.678-9', 'Diego', 'Soto', '8° A', 3),
+('23.456.789-0', 'María', 'Castillo', '7° B', 3),
+('17.233.455-6', 'Agustina', 'Ramírez', '8° B', 4),
+('19.876.543-2', 'Benjamín', 'Lagos', '7° A', 3),
+('21.987.654-3', 'Camila', 'Pérez', '6° A', 2),
+('14.567.890-1', 'Domingo', 'López', '6° B', 3),
+('18.234.567-8', 'Emilia', 'Contreras', '5° A', 3),
+('16.987.123-4', 'Florencia', 'Vidal', '5° B', 4),
+('15.345.987-6', 'Gaspar', 'Morales', '4° A', 3),
+('13.678.945-2', 'Helena', 'Ortiz', '4° B', 3),
+('12.998.765-5', 'Ignacio', 'Araya', '3° A', 2),
+('17.654.321-0', 'Javiera', 'Reyes', '3° B', 4),
+('18.765.432-1', 'Katalina', 'Pino', '2° A', 3),
+('19.112.233-4', 'Leonardo', 'Gallardo', '2° B', 3),
+('20.223.344-5', 'Marcos', 'Baeza', '1° A', 2),
+('21.334.455-6', 'Nicole', 'Toro', '1° B', 3),
+('22.445.566-7', 'Olivia', 'Rojas', '8° C', 3),
+('23.556.677-8', 'Pablo', 'Nuñez', '7° C', 4),
+('24.667.788-9', 'Quintina', 'Vargas', '6° C', 3),
+('25.778.899-0', 'Rafael', 'Saavedra', '5° C', 3),
+('26.889.900-1', 'Sofía', 'Lemus', '4° C', 3),
+('27.990.011-2', 'Tomás', 'Meza', '3° C', 2),
+('28.101.122-3', 'Úrsula', 'Aravena', '2° C', 3),
+('29.212.233-4', 'Valentina', 'Carrasco', '1° C', 3),
+('30.323.344-5', 'William', 'Espinoza', '8° D', 4),
+('31.434.455-6', 'Ximena', 'Salazar', '7° D', 3),
+('32.545.566-7', 'Yago', 'Fuentes', '6° D', 3),
+('33.656.677-8', 'Zoe', 'Campos', '5° D', 3);
+
+-- Generación automática de ítems para el inventario inicial
+WITH RECURSIVE seq_tab(n) AS (
+    SELECT 1
+    UNION ALL
+    SELECT n + 1 FROM seq_tab WHERE n < 20
+)
+INSERT INTO ITEMS_MATERIALES (ID_MATERIAL, CODIGO_ITEM, ESTADO_ITEM, UBICACION_ITEM)
+SELECT 1, CONCAT('TAB-', LPAD(n, 3, '0')), 1, 'Bodega A-1' FROM seq_tab;
+
+WITH RECURSIVE seq_nbk(n) AS (
+    SELECT 1
+    UNION ALL
+    SELECT n + 1 FROM seq_nbk WHERE n < 100
+)
+INSERT INTO ITEMS_MATERIALES (ID_MATERIAL, CODIGO_ITEM, ESTADO_ITEM, UBICACION_ITEM)
+SELECT 2, CONCAT('NBK-', LPAD(n, 3, '0')), 1, 'Carro B-1' FROM seq_nbk;
+
+WITH RECURSIVE seq_lib(n) AS (
+    SELECT 1
+    UNION ALL
+    SELECT n + 1 FROM seq_lib WHERE n < 50
+)
+INSERT INTO ITEMS_MATERIALES (ID_MATERIAL, CODIGO_ITEM, ESTADO_ITEM, UBICACION_ITEM)
+SELECT 3, CONCAT('LIB-', LPAD(n, 3, '0')), 1, 'Biblioteca' FROM seq_lib;
+
+WITH RECURSIVE seq_dep(n) AS (
+    SELECT 1
+    UNION ALL
+    SELECT n + 1 FROM seq_dep WHERE n < 30
+)
+INSERT INTO ITEMS_MATERIALES (ID_MATERIAL, CODIGO_ITEM, ESTADO_ITEM, UBICACION_ITEM)
+SELECT 4, CONCAT('DEP-', LPAD(n, 3, '0')), 1, 'Gimnasio' FROM seq_dep;
+
+-- Recalcular el stock a partir de los ítems generados
+UPDATE MATERIALES M
+SET
+    CANTIDAD_TOTAL = (SELECT COUNT(*) FROM ITEMS_MATERIALES I WHERE I.ID_MATERIAL = M.ID_MATERIAL),
+    CANTIDAD_DISPONIBLE = (
+        SELECT COUNT(*) FROM ITEMS_MATERIALES I WHERE I.ID_MATERIAL = M.ID_MATERIAL AND I.ESTADO_ITEM = 1
+    );
 
 -- Asignaturas
 INSERT INTO ASIGNATURAS (NOMBRE) VALUES
