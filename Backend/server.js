@@ -68,7 +68,62 @@ const db = mysql.createConnection(dbConfig);
 db.connect(err => {
     if (err) { console.error('Error al conectar a la base de datos:', err); return; }
     console.log(`¡Conectado exitosamente a la base de datos ${dbConfig.database}!`);
+    verificarIntegridadRecepciones();
 });
+
+function verificarIntegridadRecepciones() {
+    const constraintName = 'FK_SE_ALMACENA_ESTADO';
+    const constraintSql = `
+        SELECT REFERENCED_TABLE_NAME
+        FROM information_schema.REFERENTIAL_CONSTRAINTS
+        WHERE CONSTRAINT_SCHEMA = DATABASE() AND CONSTRAINT_NAME = ?
+    `;
+
+    db.query(constraintSql, [constraintName], (err, rows) => {
+        if (err) {
+            console.warn('No se pudo verificar la llave foránea de recepciones:', err.message);
+            return;
+        }
+
+        const referencedTable = rows[0]?.REFERENCED_TABLE_NAME;
+        if (referencedTable && referencedTable.toUpperCase() === 'DETALLE_SOLICITUD') {
+            eliminarTablaLegacy();
+            return;
+        }
+
+        console.warn('Reconfigurando la llave foránea FK_SE_ALMACENA_ESTADO para apuntar a DETALLE_SOLICITUD...');
+        const dropConstraintSql = `ALTER TABLE RECEPCIONES_MATERIAL DROP FOREIGN KEY ${constraintName}`;
+        db.query(dropConstraintSql, dropErr => {
+            if (dropErr && dropErr.code !== 'ER_CANT_DROP_FIELD_OR_KEY') {
+                console.error('No se pudo eliminar la llave foránea antigua:', dropErr.message);
+                return;
+            }
+
+            const addConstraintSql = `
+                ALTER TABLE RECEPCIONES_MATERIAL
+                ADD CONSTRAINT ${constraintName}
+                FOREIGN KEY (ID_DETALLE) REFERENCES DETALLE_SOLICITUD (ID_DETALLE)
+            `;
+            db.query(addConstraintSql, addErr => {
+                if (addErr) {
+                    console.error('No se pudo crear la llave foránea correcta:', addErr.message);
+                    return;
+                }
+                console.log('Llave foránea FK_SE_ALMACENA_ESTADO verificada.');
+                eliminarTablaLegacy();
+            });
+        });
+    });
+}
+
+function eliminarTablaLegacy() {
+    const dropLegacySql = 'DROP TABLE IF EXISTS detalle_solicid';
+    db.query(dropLegacySql, err => {
+        if (err) {
+            console.warn('No se pudo eliminar la tabla legacy detalle_solicid:', err.message);
+        }
+    });
+}
 
 // ==========================================================
 // 4. ENDPOINTS DE LOGIN Y GESTIÓN DE USUARIOS 
@@ -461,20 +516,42 @@ app.post('/api/prestamos/crear', (req, res) => {
     const { id_alumno, id_asignatura, id_item, id_usuario, fecha_prestamo, fecha_devolucion, responsable, observaciones } = req.body;
     const fechaSolicitudSQL = formatToMySQLDatetime(fecha_prestamo) || formatToMySQLDatetime(new Date());
     const fechaDevolucionSQL = formatToMySQLDatetime(fecha_devolucion) || formatToMySQLDatetime(new Date());
+
+    const idUsuarioInt = parseInt(id_usuario, 10);
+    const idAlumnoInt = parseInt(id_alumno, 10);
+    const idItemInt = parseInt(id_item, 10);
+    const idAsignaturaInt = (id_asignatura !== undefined && id_asignatura !== null && id_asignatura !== '')
+        ? parseInt(id_asignatura, 10)
+        : null;
+
+    const camposInvalidos = [
+        ['id_usuario', idUsuarioInt],
+        ['id_alumno', idAlumnoInt],
+        ['id_item', idItemInt]
+    ].filter(([_, valor]) => Number.isNaN(valor));
+
+    if (camposInvalidos.length > 0) {
+        return res.status(400).json({ message: `Campos numéricos inválidos: ${camposInvalidos.map(c => c[0]).join(', ')}` });
+    }
+
+    if (idAsignaturaInt !== null && Number.isNaN(idAsignaturaInt)) {
+        return res.status(400).json({ message: 'Campo numérico inválido: id_asignatura' });
+    }
+
     db.beginTransaction(err => {
         if (err) { throw err; }
         const sqlSolicitud = `
             INSERT INTO SOLICITUDES (ID_USUARIO, ID_ALUMNO, FECHA_SOLICITUD, ESTADO, RESPONSABLE, OBSERVACIONES, FECHA_DEVOLUCION, ID_ASIGNATURA)
             VALUES (?, ?, ?, 1, ?, ?, ?, ?)
         `;
-        db.query(sqlSolicitud, [id_usuario, id_alumno, fechaSolicitudSQL, responsable, observaciones, fechaDevolucionSQL, id_asignatura], (err, result) => {
+        db.query(sqlSolicitud, [idUsuarioInt, idAlumnoInt, fechaSolicitudSQL, responsable, observaciones, fechaDevolucionSQL, idAsignaturaInt], (err, result) => {
             if (err) { return db.rollback(() => { console.error(err); res.status(500).json({ message: "Error al crear la solicitud" }); }); }
             const idSolicitud = result.insertId;
             const sqlDetalle = `INSERT INTO DETALLE_SOLICITUD (ID_SOLICITUD, ID_ITEM) VALUES (?, ?)`;
-            db.query(sqlDetalle, [idSolicitud, id_item], (err, result) => {
+            db.query(sqlDetalle, [idSolicitud, idItemInt], (err, result) => {
                 if (err) { return db.rollback(() => { console.error(err); res.status(500).json({ message: "Error al crear el detalle" }); }); }
                 const sqlUpdateItem = `UPDATE ITEMS_INVENTARIO SET ESTADO = 'En Préstamo' WHERE ID_ITEM = ?`;
-                db.query(sqlUpdateItem, [id_item], (err, result) => {
+                db.query(sqlUpdateItem, [idItemInt], (err, result) => {
                     if (err) { return db.rollback(() => { console.error(err); res.status(500).json({ message: "Error al actualizar el ítem" }); }); }
                     db.commit(err => {
                         if (err) { return db.rollback(() => { console.error(err); res.status(500).json({ message: "Error al confirmar" }); }); }
@@ -490,18 +567,33 @@ app.post('/api/prestamos/crear', (req, res) => {
 app.post('/api/prestamos/devolver', (req, res) => {
     const { id_solicitud, id_detalle, id_item, id_usuario_encargado, estado_material, observaciones, fecha_recepcion } = req.body;
     const fechaRecepcionSQL = formatToMySQLDatetime(fecha_recepcion) || formatToMySQLDatetime(new Date());
+    const idSolicitudInt = parseInt(id_solicitud, 10);
+    const idDetalleInt = parseInt(id_detalle, 10);
+    const idItemInt = parseInt(id_item, 10);
+    const idUsuarioEncargadoInt = parseInt(id_usuario_encargado, 10);
+
+    const camposInvalidos = [
+        ['id_solicitud', idSolicitudInt],
+        ['id_detalle', idDetalleInt],
+        ['id_item', idItemInt],
+        ['id_usuario_encargado', idUsuarioEncargadoInt]
+    ].filter(([_, valor]) => Number.isNaN(valor));
+
+    if (camposInvalidos.length > 0) {
+        return res.status(400).json({ message: `Campos numéricos inválidos: ${camposInvalidos.map(c => c[0]).join(', ')}` });
+    }
 
     db.beginTransaction(err => {
         if (err) { throw err; }
         // 1. Actualizar SOLICITUD (Estado 2 = Completado)
         const sqlSolicitud = 'UPDATE SOLICITUDES SET ESTADO = 2 WHERE ID_SOLICITUD = ?';
-        db.query(sqlSolicitud, [id_solicitud], (err, result) => {
+        db.query(sqlSolicitud, [idSolicitudInt], (err, result) => {
             if (err) { return db.rollback(() => { console.error(err); res.status(500).json({ message: "Error al actualizar la solicitud" }); }); }
 
             // 2. Devolver el ítem al inventario
             const nuevoEstadoItem = (estado_material === 'Bueno' || estado_material === 'Regular') ? 'Disponible' : 'Mantenimiento';
             const sqlInventario = "UPDATE ITEMS_INVENTARIO SET ESTADO = ? WHERE ID_ITEM = ?";
-            db.query(sqlInventario, [nuevoEstadoItem, id_item], (err, result) => {
+            db.query(sqlInventario, [nuevoEstadoItem, idItemInt], (err, result) => {
                 if (err) { return db.rollback(() => { console.error(err); res.status(500).json({ message: "Error al actualizar inventario" }); }); }
 
                 // 3. Crear el registro en RECEPCIONES_MATERIAL
@@ -509,14 +601,14 @@ app.post('/api/prestamos/devolver', (req, res) => {
                     INSERT INTO RECEPCIONES_MATERIAL (ID_DETALLE, ID_USUARIO, ESTADO_MATERIAL, OBSERVACIONES, FECHA_RECEPCION)
                     VALUES (?, ?, ?, ?, ?)
                 `;
-                db.query(sqlRecepcion, [id_detalle, id_usuario_encargado, estado_material, observaciones, fechaRecepcionSQL], (err, result) => {
+                db.query(sqlRecepcion, [idDetalleInt, idUsuarioEncargadoInt, estado_material, observaciones, fechaRecepcionSQL], (err, result) => {
                     if (err) { return db.rollback(() => { console.error(err); res.status(500).json({ message: "Error al crear la recepción" }); }); }
 
                     // 4. Actualizar el DETALLE_SOLICITUD
                     const sqlDetalle = 'UPDATE DETALLE_SOLICITUD SET ESTADO_DEVOLUCION = ?, OBSERVACIONES_DEVOLUCION = ? WHERE ID_DETALLE = ?';
-                    db.query(sqlDetalle, [estado_material, observaciones, id_detalle], (err, result) => {
+                    db.query(sqlDetalle, [estado_material, observaciones, idDetalleInt], (err, result) => {
                         if (err) { return db.rollback(() => { console.error(err); res.status(500).json({ message: "Error al actualizar el detalle" }); }); }
-                        
+
                         // 5. Confirmar
                         db.commit(err => {
                             if (err) { return db.rollback(() => { console.error(err); res.status(500).json({ message: "Error al confirmar" }); }); }
