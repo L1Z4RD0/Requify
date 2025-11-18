@@ -414,6 +414,98 @@
                         </div>
                     </div>
                 </div>
+
+                <div class="row g-4 mt-4">
+                    <div class="col-lg-6">
+                        <div class="card">
+                            <div class="card-header d-flex justify-content-between align-items-center">
+                                <h5 class="mb-0"><i class="fas fa-tags"></i> Gestión de Categorías</h5>
+                                <span class="badge bg-primary">Códigos automáticos</span>
+                            </div>
+                            <div class="card-body">
+                                <form id="formNuevaCategoria" class="row g-3">
+                                    <div class="col-md-6">
+                                        <label class="form-label">Nombre de la categoría *</label>
+                                        <input type="text" class="form-control" id="nombreCategoria" required>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label">Código base *</label>
+                                        <input type="text" class="form-control text-uppercase" id="codigoBase" maxlength="5" placeholder="Ej: TAB" required>
+                                    </div>
+                                    <div class="col-md-3">
+                                        <label class="form-label">Máx. días *</label>
+                                        <input type="number" class="form-control" id="maxDiasCategoria" min="1" value="7" required>
+                                    </div>
+                                    <div class="col-12 text-end">
+                                        <button type="submit" class="btn btn-success">
+                                            <i class="fas fa-save"></i> Guardar categoría
+                                        </button>
+                                    </div>
+                                </form>
+
+                                <hr class="my-4">
+                                <div class="table-responsive">
+                                    <table class="table table-sm align-middle">
+                                        <thead>
+                                            <tr>
+                                                <th>Nombre</th>
+                                                <th>Código</th>
+                                                <th>Máx. días</th>
+                                                <th>Correlativo</th>
+                                                <th>Materiales</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody id="tablaCategorias">
+                                            <tr><td colspan="5" class="text-center text-muted">Sin categorías</td></tr>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="col-lg-6">
+                        <div class="card">
+                            <div class="card-header">
+                                <h5 class="mb-0"><i class="fas fa-plus-circle"></i> Registrar nuevo material</h5>
+                            </div>
+                            <div class="card-body">
+                                <form id="formNuevoMaterial" class="row g-3">
+                                    <div class="col-md-6">
+                                        <label class="form-label">Categoría *</label>
+                                        <select class="form-select" id="categoriaMaterialSelect" required>
+                                            <option value="">-- Seleccione categoría --</option>
+                                        </select>
+                                    </div>
+                                    <div class="col-md-6">
+                                        <label class="form-label">Nombre *</label>
+                                        <input type="text" class="form-control" id="nombreMaterial" required>
+                                    </div>
+                                    <div class="col-12">
+                                        <label class="form-label">Descripción</label>
+                                        <textarea class="form-control" id="descripcionMaterial" rows="2" placeholder="Detalles técnicos, marca, etc."></textarea>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label">Cantidad *</label>
+                                        <input type="number" class="form-control" id="cantidadMaterial" min="1" value="1" required>
+                                    </div>
+                                    <div class="col-md-8">
+                                        <label class="form-label">Ubicación</label>
+                                        <input type="text" class="form-control" id="ubicacionMaterial" placeholder="Ej: Bodega A-1">
+                                    </div>
+                                    <div class="col-12 text-end">
+                                        <button type="submit" class="btn btn-primary">
+                                            <i class="fas fa-box"></i> Agregar material
+                                        </button>
+                                    </div>
+                                </form>
+                                <div class="alert alert-info mt-3">
+                                    <i class="fas fa-info-circle"></i> El código del material se generará automáticamente (ej: TAB-001).
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
 
             <!-- Sección: Reportes -->

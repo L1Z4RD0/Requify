@@ -31,6 +31,7 @@ window.addEventListener('load', () => {
     cargarTablaPendientes();
     actualizarInventarioDisplay();
     cargarAlumnosSelect();
+    cargarAsignaturasSelect();
     cargarMaterialesSelect();
 
     document.getElementById('btnConfirmarDevolucion').addEventListener('click', confirmarDevolucion);
@@ -72,12 +73,45 @@ function actualizarFecha() {
 }
 function configurarFechasPorDefecto() {
     const ahora = new Date();
-    ahora.setMinutes(ahora.getMinutes() - ahora.getTimezoneOffset());
-    const fechaActualString = ahora.toISOString().slice(0, 16);
-    document.getElementById('fechaPrestamo').value = fechaActualString;
+    const fechaPrestamoInput = document.getElementById('fechaPrestamo');
+    const fechaDevolucionInput = document.getElementById('fechaDevolucion');
+    const fechaActualString = obtenerFechaLocalISO(ahora);
+    fechaPrestamoInput.value = fechaActualString;
+    fechaPrestamoInput.min = fechaActualString;
+    fechaPrestamoInput.max = fechaActualString;
     const fechaDevolucion = new Date(ahora);
     fechaDevolucion.setDate(fechaDevolucion.getDate() + 7);
-    document.getElementById('fechaDevolucion').value = fechaDevolucion.toISOString().slice(0, 16);
+    const fechaDevolucionString = obtenerFechaLocalISO(fechaDevolucion);
+    fechaDevolucionInput.value = fechaDevolucionString;
+    fechaDevolucionInput.min = fechaActualString;
+    fechaDevolucionInput.removeAttribute('max');
+    actualizarLimiteDevolucion(null);
+}
+
+function obtenerFechaLocalISO(fecha) {
+    const copia = new Date(fecha.getTime() - fecha.getTimezoneOffset() * 60000);
+    return copia.toISOString().slice(0, 16);
+}
+
+function actualizarLimiteDevolucion(maxDias) {
+    const mensaje = document.getElementById('mensajeLimiteFecha');
+    const fechaPrestamoValor = document.getElementById('fechaPrestamo').value;
+    const fechaDevolucionInput = document.getElementById('fechaDevolucion');
+    if (!fechaPrestamoValor) { return; }
+    if (!maxDias || parseInt(maxDias, 10) <= 0) {
+        mensaje.textContent = 'Seleccione un material para conocer el límite máximo.';
+        fechaDevolucionInput.removeAttribute('max');
+        return;
+    }
+    const inicio = new Date(fechaPrestamoValor);
+    const limite = new Date(inicio);
+    limite.setDate(limite.getDate() + parseInt(maxDias, 10));
+    const limiteISO = obtenerFechaLocalISO(limite);
+    fechaDevolucionInput.max = limiteISO;
+    if (fechaDevolucionInput.value && fechaDevolucionInput.value > limiteISO) {
+        fechaDevolucionInput.value = limiteISO;
+    }
+    mensaje.textContent = `Debe devolver antes del ${formatearFecha(limite.toISOString())} (máx. ${maxDias} días).`;
 }
 
 // ==========================================================
@@ -100,7 +134,9 @@ async function cargarMaterialesSelect() { /* (Sin cambios) */
         if (!response.ok) throw new Error('Respuesta de red no fue OK');
         const materiales = await response.json();
         select.innerHTML = '<option value="">-- Seleccione material --</option>';
-        materiales.forEach(mat => { select.innerHTML += `<option value="${mat.ID_MATERIAL}" data-disponibles="${mat.CANTIDAD_DISPONIBLE}">${mat.NOMBRE_TIPO_MATERIAL} - ${mat.NOMBRE} (Disp: ${mat.CANTIDAD_DISPONIBLE})</option>`; });
+        materiales.forEach(mat => {
+            select.innerHTML += `<option value="${mat.ID_MATERIAL}" data-disponibles="${mat.CANTIDAD_DISPONIBLE}" data-max-dias="${mat.MAX_DIAS_PRESTAMO}">${mat.NOMBRE_TIPO_MATERIAL} - ${mat.NOMBRE} (${mat.CODIGO}) (Disp: ${mat.CANTIDAD_DISPONIBLE})</option>`;
+        });
     } catch (error) { console.error('Error cargando materiales:', error); select.innerHTML = '<option value="">Error al cargar materiales</option>'; }
 }
 document.getElementById('materialSelect').addEventListener('change', (e) => { /* (Sin cambios) */
@@ -108,6 +144,8 @@ document.getElementById('materialSelect').addEventListener('change', (e) => { /*
     const disponibles = opcionSeleccionada.getAttribute('data-disponibles') || '-';
     document.getElementById('disponiblesInfo').textContent = disponibles;
     document.getElementById('cantidadPrestamo').max = disponibles;
+    const maxDias = opcionSeleccionada.getAttribute('data-max-dias');
+    actualizarLimiteDevolucion(maxDias);
 });
 
 // ==========================================================
@@ -294,10 +332,33 @@ async function actualizarInventarioCompleto() { /* (Sin cambios) */
 const formNuevoPrestamo = document.getElementById('formNuevoPrestamo');
 formNuevoPrestamo.addEventListener('submit', async (e) => {
     e.preventDefault();
-    const prestamo = { id_alumno: document.getElementById('alumnoSelect').value, id_material: document.getElementById('materialSelect').value, cantidad: parseInt(document.getElementById('cantidadPrestamo').value), fecha_prestamo: document.getElementById('fechaPrestamo').value, fecha_devolucion: document.getElementById('fechaDevolucion').value, responsable: document.getElementById('responsableSelect').value, observaciones: document.getElementById('observaciones').value, id_usuario: usuarioLogueado.id };
+    const prestamo = {
+        id_alumno: document.getElementById('alumnoSelect').value,
+        id_material: document.getElementById('materialSelect').value,
+        id_asignatura: document.getElementById('asignaturaSelect').value,
+        cantidad: parseInt(document.getElementById('cantidadPrestamo').value),
+        fecha_prestamo: document.getElementById('fechaPrestamo').value,
+        fecha_devolucion: document.getElementById('fechaDevolucion').value,
+        responsable: document.getElementById('responsableSelect').value,
+        observaciones: document.getElementById('observaciones').value,
+        id_usuario: usuarioLogueado.id
+    };
     const maxDisponible = document.getElementById('materialSelect').selectedOptions[0].getAttribute('data-disponibles');
     if (!maxDisponible || prestamo.cantidad > parseInt(maxDisponible)) { alert(`Error: No puedes prestar ${prestamo.cantidad}. Solo hay ${maxDisponible || 0} disponibles.`); return; }
     if (!prestamo.id_alumno || !prestamo.id_material) { alert("Por favor, seleccione un alumno y un material."); return; }
+    if (!prestamo.id_asignatura) { alert('Por favor, seleccione una asignatura.'); return; }
+    if (!prestamo.fecha_devolucion) { alert('Debe indicar la fecha estimada de devolución.'); return; }
+    const fechaPrestamo = new Date(prestamo.fecha_prestamo);
+    const fechaDevolucion = new Date(prestamo.fecha_devolucion);
+    if (fechaDevolucion < fechaPrestamo) { alert('La fecha de devolución no puede ser anterior a la fecha de préstamo.'); return; }
+    const maxDiasPermitidos = parseInt(document.getElementById('materialSelect').selectedOptions[0].getAttribute('data-max-dias') || '0', 10);
+    if (maxDiasPermitidos) {
+        const diasSolicitados = Math.ceil((fechaDevolucion - fechaPrestamo) / (1000 * 60 * 60 * 24));
+        if (diasSolicitados > maxDiasPermitidos) {
+            alert(`La devolución supera el máximo permitido de ${maxDiasPermitidos} días para este material.`);
+            return;
+        }
+    }
     try {
         const response = await fetch(`${API_URL}/prestamos/crear`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(prestamo) });
         const data = await response.json();
@@ -403,6 +464,22 @@ async function cargarHistorial() {
     } catch (error) {
         console.error('Error cargando historial:', error);
         tablaHistorial.innerHTML = `<tr><td colspan="8" class="text-center text-danger">Error al cargar el historial.</td></tr>`;
+    }
+}
+
+async function cargarAsignaturasSelect() {
+    const select = document.getElementById('asignaturaSelect');
+    try {
+        const response = await fetch(`${API_URL}/asignaturas`);
+        if (!response.ok) throw new Error('Respuesta de red no fue OK');
+        const asignaturas = await response.json();
+        select.innerHTML = '<option value="">-- Seleccione asignatura --</option>';
+        asignaturas.forEach(asignatura => {
+            select.innerHTML += `<option value="${asignatura.ID_ASIGNATURA}">${asignatura.NOMBRE}</option>`;
+        });
+    } catch (error) {
+        console.error('Error cargando asignaturas:', error);
+        select.innerHTML = '<option value="">Error al cargar asignaturas</option>';
     }
 }
 
