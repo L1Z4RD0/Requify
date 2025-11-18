@@ -326,13 +326,13 @@ app.get('/api/items-disponibles/:id_material', (req, res) => {
 // --- OBTENER INVENTARIO (General) ---
 app.get('/api/inventario', (req, res) => {
     const sql = `
-        SELECT 
-            T.NOMBRE_TIPO_MATERIAL as TIPO,
-            M.ID_MATERIAL,
-            M.NOMBRE,
-            M.MAX_DIAS_PRESTAMO,
-            (SELECT COUNT(*) FROM ITEMS_INVENTARIO i WHERE i.ID_MATERIAL = M.ID_MATERIAL) as total,
-            (SELECT COUNT(*) FROM ITEMS_INVENTARIO i WHERE i.ID_MATERIAL = M.ID_MATERIAL AND i.ESTADO = 'Disponible') as disponibles
+        SELECT
+            T.NOMBRE_TIPO_MATERIAL AS tipo,
+            M.ID_MATERIAL AS id_material,
+            M.NOMBRE AS nombre,
+            M.MAX_DIAS_PRESTAMO AS max_dias_prestamo,
+            (SELECT COUNT(*) FROM ITEMS_INVENTARIO i WHERE i.ID_MATERIAL = M.ID_MATERIAL) AS total,
+            (SELECT COUNT(*) FROM ITEMS_INVENTARIO i WHERE i.ID_MATERIAL = M.ID_MATERIAL AND i.ESTADO = 'Disponible') AS disponibles
         FROM MATERIALES M
         JOIN TIPO_MATERIALES T ON M.ID_TIPO_MATERIAL = T.ID_TIPO_MATERIAL
     `;

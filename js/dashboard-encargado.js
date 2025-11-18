@@ -308,15 +308,21 @@ async function actualizarInventarioDisplay() {
         const inventario = await response.json();
         
         inventario.forEach(item => {
+            const nombreMaterial = item.nombre || item.NOMBRE || '';
+            const total = (item.total ?? item.TOTAL) ?? 0;
+            const disponibles = (item.disponibles ?? item.DISPONIBLES) ?? 0;
+
+            if (!nombreMaterial) return;
+
             let idDisp, idProg;
-            if (item.nombre.includes('Tablet')) { idDisp = 'tabletsDisp'; idProg = 'progTablets'; }
-            else if (item.nombre.includes('Notebook')) { idDisp = 'notebooksDisp'; idProg = 'progNotebooks'; }
-            else if (item.nombre.includes('Libro')) { idDisp = 'librosDisp'; idProg = 'progLibros'; }
-            else if (item.nombre.includes('Deportivo')) { idDisp = 'deportivoDisp'; idProg = 'progDeportivo'; }
-            
+            if (nombreMaterial.includes('Tablet')) { idDisp = 'tabletsDisp'; idProg = 'progTablets'; }
+            else if (nombreMaterial.includes('Notebook')) { idDisp = 'notebooksDisp'; idProg = 'progNotebooks'; }
+            else if (nombreMaterial.includes('Libro')) { idDisp = 'librosDisp'; idProg = 'progLibros'; }
+            else if (nombreMaterial.includes('Deportivo')) { idDisp = 'deportivoDisp'; idProg = 'progDeportivo'; }
+
             if (idDisp && document.getElementById(idDisp)) {
-                document.getElementById(idDisp).textContent = item.disponibles;
-                const progreso = (item.total > 0) ? (item.disponibles / item.total) * 100 : 0;
+                document.getElementById(idDisp).textContent = disponibles;
+                const progreso = total > 0 ? (disponibles / total) * 100 : 0;
                 document.getElementById(idProg).style.width = progreso + '%';
             }
         });
@@ -328,17 +334,23 @@ async function actualizarInventarioCompleto() {
         const inventario = await response.json();
         
         inventario.forEach(item => {
+            const nombreMaterial = item.nombre || item.NOMBRE || '';
+            const total = (item.total ?? item.TOTAL) ?? 0;
+            const disponibles = (item.disponibles ?? item.DISPONIBLES) ?? 0;
+
+            if (!nombreMaterial) return;
+
             let idDisp, idPrest, idProg;
-            if (item.nombre.includes('Tablet')) { idDisp = 'tabletsInvDisp'; idPrest = 'tabletsInvPrest'; idProg = 'progressInvTablets'; }
-            else if (item.nombre.includes('Notebook')) { idDisp = 'notebooksInvDisp'; idPrest = 'notebooksInvPrest'; idProg = 'progressInvNotebooks'; }
-            else if (item.nombre.includes('Libro')) { idDisp = 'librosInvDisp'; idPrest = 'librosInvPrest'; idProg = 'progressInvLibros'; }
-            else if (item.nombre.includes('Deportivo')) { idDisp = 'deportivoInvDisp'; idPrest = 'deportivoInvPrest'; idProg = 'progressInvDeportivo'; }
+            if (nombreMaterial.includes('Tablet')) { idDisp = 'tabletsInvDisp'; idPrest = 'tabletsInvPrest'; idProg = 'progressInvTablets'; }
+            else if (nombreMaterial.includes('Notebook')) { idDisp = 'notebooksInvDisp'; idPrest = 'notebooksInvPrest'; idProg = 'progressInvNotebooks'; }
+            else if (nombreMaterial.includes('Libro')) { idDisp = 'librosInvDisp'; idPrest = 'librosInvPrest'; idProg = 'progressInvLibros'; }
+            else if (nombreMaterial.includes('Deportivo')) { idDisp = 'deportivoInvDisp'; idPrest = 'deportivoInvPrest'; idProg = 'progressInvDeportivo'; }
 
             if (idDisp && document.getElementById(idDisp)) {
-                const prestados = item.total - item.disponibles;
-                document.getElementById(idDisp).textContent = item.disponibles;
+                const prestados = total - disponibles;
+                document.getElementById(idDisp).textContent = disponibles;
                 document.getElementById(idPrest).textContent = prestados;
-                const progreso = (item.total > 0) ? (item.disponibles / item.total) * 100 : 0;
+                const progreso = total > 0 ? (disponibles / total) * 100 : 0;
                 document.getElementById(idProg).style.width = progreso + '%';
             }
         });
