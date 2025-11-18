@@ -20,7 +20,7 @@ const db = mysql.createConnection({
     port: '3306',
     user: 'root',
     password: 'BB21JhonWick', 
-    database: 'Requify_Demo',
+    database: 'requify_demov0.3',
     multipleStatements: true
 });
 
