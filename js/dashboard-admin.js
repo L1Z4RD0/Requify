@@ -37,6 +37,7 @@ window.addEventListener('load', () => {
     cargarActividadReciente(); // Aún no conectada, pero la dejamos lista
     cargarAlertas();
     cargarCategoriasInventario();
+    cargarUbicaciones();
 });
 
 // ==========================================================
@@ -109,13 +110,36 @@ async function cargarDashboard() {
     try {
         const response = await fetch(`${API_URL}/dashboard/admin-stats`);
         if (!response.ok) throw new Error('No se pudieron cargar las estadísticas');
-        
+
         const stats = await response.json();
-        
-        document.getElementById('totalUsuarios').textContent = stats.totalUsuarios;
-        document.getElementById('prestamosActivos').textContent = stats.prestamosActivos;
-        document.getElementById('prestamosVencidos').textContent = stats.prestamosVencidos;
-        document.getElementById('totalMateriales').textContent = stats.totalMateriales || 170; // 170 es tu valor de respaldo
+        const mapaTarjetas = {
+            'Tablets': { total: 'cardTabletsTotal', disp: 'cardTabletsDisp', prest: 'cardTabletsPrest' },
+            'Notebooks': { total: 'cardNotebooksTotal', disp: 'cardNotebooksDisp', prest: 'cardNotebooksPrest' },
+            'Libros': { total: 'cardLibrosTotal', disp: 'cardLibrosDisp', prest: 'cardLibrosPrest' },
+            'Material Deportivo': { total: 'cardDeportivoTotal', disp: 'cardDeportivoDisp', prest: 'cardDeportivoPrest' }
+        };
+
+        stats.principales.forEach(cat => {
+            const refs = mapaTarjetas[cat.nombre];
+            if (!refs) { return; }
+            document.getElementById(refs.total).textContent = cat.total;
+            document.getElementById(refs.disp).textContent = cat.disponibles;
+            document.getElementById(refs.prest).textContent = cat.prestados;
+        });
+
+        const tablaOtras = document.getElementById('tablaOtrasCategorias');
+        if (stats.otrasCategorias.length === 0) {
+            tablaOtras.innerHTML = '<tr><td colspan="4" class="text-center text-muted">Sin categorías adicionales</td></tr>';
+        } else {
+            tablaOtras.innerHTML = stats.otrasCategorias.map(cat => `
+                <tr>
+                    <td>${cat.nombre}</td>
+                    <td>${cat.total}</td>
+                    <td>${cat.disponibles}</td>
+                    <td>${cat.prestados}</td>
+                </tr>
+            `).join('');
+        }
 
     } catch (error) {
         console.error('Error cargando dashboard:', error);
@@ -184,7 +208,6 @@ if (formNuevaCategoria) {
         e.preventDefault();
         const payload = {
             nombre: document.getElementById('nombreCategoria').value,
-            codigo_base: document.getElementById('codigoBase').value,
             max_dias: document.getElementById('maxDiasCategoria').value,
         };
         try {
@@ -195,7 +218,7 @@ if (formNuevaCategoria) {
             });
             const data = await response.json();
             if (!response.ok) throw new Error(data.message || 'Error al crear categoría');
-            alert('Categoría creada correctamente');
+            alert(`Categoría ${data.codigo_base} creada correctamente`);
             formNuevaCategoria.reset();
             document.getElementById('maxDiasCategoria').value = 7;
             cargarCategoriasInventario();
@@ -218,6 +241,10 @@ if (formNuevoMaterial) {
         };
         if (!payload.id_categoria) {
             alert('Seleccione una categoría válida.');
+            return;
+        }
+        if (!payload.ubicacion) {
+            alert('Seleccione una ubicación válida.');
             return;
         }
         try {
@@ -410,7 +437,7 @@ async function cargarPrestamos() {
                     <td>${p.ID_SOLICITUD}</td>
                     <td>${p.ALUMNO_NOMBRE} ${p.ALUMNO_APELLIDO}</td>
                     <td>${p.MATERIAL_NOMBRE}</td>
-                    <td><span class="badge bg-info">${p.CANTIDAD}</span></td>
+                    <td><span class="badge bg-info text-dark">${p.CODIGO_ITEM}</span></td>
                     <td>${formatearFecha(p.FECHA_SOLICITUD)}</td>
                     <td>${formatearFecha(p.FECHA_DEVOLUCION)}</td>
                     <td><span class="badge ${estadoBadge}">${estadoTexto}</span></td>
@@ -515,7 +542,7 @@ async function cargarCategoriasInventario() {
         const categorias = await response.json();
 
         if (categorias.length === 0) {
-            tablaCategorias.innerHTML = `<tr><td colspan="5" class="text-center text-muted">No hay categorías registradas</td></tr>`;
+            tablaCategorias.innerHTML = `<tr><td colspan="7" class="text-center text-muted">No hay categorías registradas</td></tr>`;
         } else {
             tablaCategorias.innerHTML = categorias.map((cat) => `
                 <tr>
@@ -524,6 +551,8 @@ async function cargarCategoriasInventario() {
                     <td>${cat.MAX_DIAS_PRESTAMO} días</td>
                     <td>${String(cat.CONSECUTIVO_ACTUAL).padStart(3, '0')}</td>
                     <td>${cat.TOTAL_MATERIALES}</td>
+                    <td>${cat.TOTAL_ITEMS}</td>
+                    <td>${cat.ITEMS_DISPONIBLES}</td>
                 </tr>
             `).join('');
         }
@@ -534,8 +563,25 @@ async function cargarCategoriasInventario() {
         });
     } catch (error) {
         console.error('Error cargando categorías:', error);
-        tablaCategorias.innerHTML = `<tr><td colspan="5" class="text-center text-danger">Error al cargar categorías.</td></tr>`;
+        tablaCategorias.innerHTML = `<tr><td colspan="7" class="text-center text-danger">Error al cargar categorías.</td></tr>`;
         selectCategorias.innerHTML = '<option value="">Error al cargar</option>';
+    }
+}
+
+async function cargarUbicaciones() {
+    const selectUbicaciones = document.getElementById('ubicacionMaterial');
+    if (!selectUbicaciones) { return; }
+    try {
+        const response = await fetch(`${API_URL}/ubicaciones`);
+        if (!response.ok) throw new Error('No se pudieron cargar las ubicaciones');
+        const ubicaciones = await response.json();
+        selectUbicaciones.innerHTML = '<option value="">-- Seleccione ubicación --</option>';
+        ubicaciones.forEach((ubi) => {
+            selectUbicaciones.innerHTML += `<option value="${ubi.NOMBRE}">${ubi.NOMBRE}</option>`;
+        });
+    } catch (error) {
+        console.error('Error cargando ubicaciones:', error);
+        selectUbicaciones.innerHTML = '<option value="">Error al cargar ubicaciones</option>';
     }
 }
 

@@ -76,52 +76,78 @@
         <div class="content-area">
             <!-- Sección: Dashboard -->
             <div id="section-dashboard" class="content-section active">
-                <div class="row g-4 mb-4">
+                <div class="row g-4 mb-4" id="resumenCategorias">
                     <div class="col-md-3">
                         <div class="stat-card bg-primary">
                             <div class="stat-icon">
-                                <i class="fas fa-users"></i>
+                                <i class="fas fa-tablet-alt"></i>
                             </div>
                             <div class="stat-info">
-                                <h3 id="totalUsuarios">0</h3>
-                                <p>Usuarios Registrados</p>
+                                <h3 id="cardTabletsTotal">0</h3>
+                                <p>Tablets Totales</p>
+                                <small>Disp: <span id="cardTabletsDisp">0</span> · Prestados: <span id="cardTabletsPrest">0</span></small>
                             </div>
                         </div>
                     </div>
-                    
                     <div class="col-md-3">
                         <div class="stat-card bg-success">
                             <div class="stat-icon">
-                                <i class="fas fa-handshake"></i>
+                                <i class="fas fa-laptop"></i>
                             </div>
                             <div class="stat-info">
-                                <h3 id="prestamosActivos">0</h3>
-                                <p>Préstamos Activos</p>
+                                <h3 id="cardNotebooksTotal">0</h3>
+                                <p>Notebooks Totales</p>
+                                <small>Disp: <span id="cardNotebooksDisp">0</span> · Prestados: <span id="cardNotebooksPrest">0</span></small>
                             </div>
                         </div>
                     </div>
-                    
                     <div class="col-md-3">
                         <div class="stat-card bg-warning">
                             <div class="stat-icon">
-                                <i class="fas fa-clock"></i>
+                                <i class="fas fa-book"></i>
                             </div>
                             <div class="stat-info">
-                                <h3 id="prestamosVencidos">0</h3>
-                                <p>Préstamos Vencidos</p>
+                                <h3 id="cardLibrosTotal">0</h3>
+                                <p>Libros Totales</p>
+                                <small>Disp: <span id="cardLibrosDisp">0</span> · Prestados: <span id="cardLibrosPrest">0</span></small>
                             </div>
                         </div>
                     </div>
-                    
                     <div class="col-md-3">
                         <div class="stat-card bg-info">
                             <div class="stat-icon">
-                                <i class="fas fa-boxes"></i>
+                                <i class="fas fa-basketball-ball"></i>
                             </div>
                             <div class="stat-info">
-                                <h3 id="totalMateriales">170</h3>
-                                <p>Total Materiales</p>
+                                <h3 id="cardDeportivoTotal">0</h3>
+                                <p>Material Deportivo</p>
+                                <small>Disp: <span id="cardDeportivoDisp">0</span> · Prestados: <span id="cardDeportivoPrest">0</span></small>
                             </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card mb-4">
+                    <div class="card-header">
+                        <h5><i class="fas fa-layer-group"></i> Otras Categorías</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="table-responsive">
+                            <table class="table table-hover">
+                                <thead>
+                                    <tr>
+                                        <th>Categoria</th>
+                                        <th>Total Ítems</th>
+                                        <th>Disponibles</th>
+                                        <th>Prestados</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tablaOtrasCategorias">
+                                    <tr>
+                                        <td colspan="4" class="text-center text-muted">Sin categorías adicionales</td>
+                                    </tr>
+                                </tbody>
+                            </table>
                         </div>
                     </div>
                 </div>
@@ -312,7 +338,7 @@
                                         <th>ID</th>
                                         <th>Alumno</th>
                                         <th>Material</th>
-                                        <th>Cantidad</th>
+                                        <th>Ítem</th>
                                         <th>Fecha Préstamo</th>
                                         <th>Fecha Devolución</th>
                                         <th>Estado</th>
@@ -424,15 +450,12 @@
                             </div>
                             <div class="card-body">
                                 <form id="formNuevaCategoria" class="row g-3">
-                                    <div class="col-md-6">
+                                    <div class="col-md-8">
                                         <label class="form-label">Nombre de la categoría *</label>
                                         <input type="text" class="form-control" id="nombreCategoria" required>
+                                        <small class="text-muted">El código se genera automáticamente (ej: TAB, NBK, AU2).</small>
                                     </div>
-                                    <div class="col-md-3">
-                                        <label class="form-label">Código base *</label>
-                                        <input type="text" class="form-control text-uppercase" id="codigoBase" maxlength="5" placeholder="Ej: TAB" required>
-                                    </div>
-                                    <div class="col-md-3">
+                                    <div class="col-md-4">
                                         <label class="form-label">Máx. días *</label>
                                         <input type="number" class="form-control" id="maxDiasCategoria" min="1" value="7" required>
                                     </div>
@@ -452,11 +475,13 @@
                                                 <th>Código</th>
                                                 <th>Máx. días</th>
                                                 <th>Correlativo</th>
-                                                <th>Materiales</th>
+                                                <th>Lotes</th>
+                                                <th>Total Ítems</th>
+                                                <th>Disponibles</th>
                                             </tr>
                                         </thead>
                                         <tbody id="tablaCategorias">
-                                            <tr><td colspan="5" class="text-center text-muted">Sin categorías</td></tr>
+                                            <tr><td colspan="7" class="text-center text-muted">Sin categorías</td></tr>
                                         </tbody>
                                     </table>
                                 </div>
@@ -490,8 +515,10 @@
                                         <input type="number" class="form-control" id="cantidadMaterial" min="1" value="1" required>
                                     </div>
                                     <div class="col-md-8">
-                                        <label class="form-label">Ubicación</label>
-                                        <input type="text" class="form-control" id="ubicacionMaterial" placeholder="Ej: Bodega A-1">
+                                        <label class="form-label">Ubicación *</label>
+                                        <select class="form-select" id="ubicacionMaterial" required>
+                                            <option value="">-- Seleccione ubicación --</option>
+                                        </select>
                                     </div>
                                     <div class="col-12 text-end">
                                         <button type="submit" class="btn btn-primary">
