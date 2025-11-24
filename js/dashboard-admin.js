@@ -4,6 +4,9 @@
 // DEFINIMOS LA URL DE NUESTRA API
 // ==========================================================
 const API_URL = 'http://localhost:3000/api';
+let chartMateriales;
+let chartActividad;
+let datosReportes = { materiales: [], actividad: [], rangoMateriales: {}, rangoActividad: {} };
 
 // ==========================================================
 // VERIFICACIÓN DE SESIÓN (Esto no cambia)
@@ -37,7 +40,10 @@ window.addEventListener('load', () => {
     cargarActividadReciente(); // Aún no conectada, pero la dejamos lista
     cargarAlertas();
     cargarCategoriasInventario();
+    cargarCategoriasFiltroPrestamos();
     cargarUbicaciones();
+    cargarPrestamos();
+    inicializarReportes();
 });
 
 // ==========================================================
@@ -74,6 +80,7 @@ navLinks.forEach(link => {
             cargarUsuarios();
         } else if (sectionId === 'prestamos') {
             cargarPrestamos();
+            cargarCategoriasFiltroPrestamos();
         }
     });
 });
@@ -170,6 +177,25 @@ async function cargarAlertas() {
     } catch (error) {
         console.error('Error cargando alertas:', error);
         alertasDiv.innerHTML = '<p class="text-danger text-center">No se pudieron cargar las alertas</p>';
+    }
+}
+
+async function cargarCategoriasFiltroPrestamos() {
+    const select = document.getElementById('filtroMaterial');
+    if (!select) return;
+    try {
+        const response = await fetch(`${API_URL}/categorias`);
+        if (!response.ok) throw new Error('No se pudieron cargar las categorías');
+        const categorias = await response.json();
+        select.innerHTML = '<option value="">Todos los materiales</option>';
+        categorias.forEach(cat => {
+            const option = document.createElement('option');
+            option.value = cat.CODIGO_BASE;
+            option.textContent = cat.NOMBRE_TIPO_MATERIAL;
+            select.appendChild(option);
+        });
+    } catch (error) {
+        console.error('Error cargando categorías para filtro de préstamos:', error);
     }
 }
 
@@ -347,8 +373,8 @@ async function cargarUsuarios() {
                     <button class="btn btn-sm btn-warning" onclick="editarUsuario(${usuario.ID_USUARIO})">
                         <i class="fas fa-edit"></i>
                     </button>
-                    <button class="btn btn-sm btn-danger" onclick="eliminarUsuario(${usuario.ID_USUARIO})">
-                        <i class="fas fa-trash"></i>
+                    <button class="btn btn-sm ${usuario.ESTADO ? 'btn-danger' : 'btn-success'}" onclick="cambiarEstadoUsuario(${usuario.ID_USUARIO}, ${usuario.ESTADO ? 0 : 1})">
+                        <i class="fas ${usuario.ESTADO ? 'fa-ban' : 'fa-undo'}"></i>
                     </button>
                 </td>
             </tr>
@@ -361,31 +387,26 @@ async function cargarUsuarios() {
 }
 
 // --- ELIMINAR USUARIO ---
-async function eliminarUsuario(id) {
-    // No permitimos borrar el usuario admin (ID 1)
+async function cambiarEstadoUsuario(id, nuevoEstado) {
     if (id === 1) {
-        alert('No se puede eliminar al usuario Administrador principal.');
+        alert('No se puede desactivar al usuario Administrador principal.');
         return;
     }
-    
-    if (confirm('¿Está seguro de eliminar este usuario? Esta acción es irreversible.')) {
+
+    const accion = nuevoEstado === 1 ? 'reactivar' : 'desactivar';
+    if (confirm(`¿Desea ${accion} este usuario?`)) {
         try {
-            const response = await fetch(`${API_URL}/usuarios/eliminar/${id}`, {
-                method: 'DELETE'
+            const response = await fetch(`${API_URL}/usuarios/${id}/estado`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ estado: nuevoEstado })
             });
-
             const data = await response.json();
-
-            if (!response.ok) {
-                throw new Error(data.message || 'Error al eliminar usuario');
-            }
-
-            alert('Usuario eliminado exitosamente');
-            cargarUsuarios(); // Recargar la tabla
-            cargarDashboard(); // Actualizar stats
-
+            if (!response.ok) throw new Error(data.message || 'No se pudo actualizar el estado');
+            alert(`Usuario ${accion}do correctamente`);
+            cargarUsuarios();
         } catch (error) {
-            console.error('Error al eliminar usuario:', error);
+            console.error('Error al actualizar estado del usuario:', error);
             alert(`Error: ${error.message}`);
         }
     }
@@ -407,8 +428,16 @@ function editarUsuario(id) {
 // ==========================================================
 async function cargarPrestamos() {
     const tablaPrestamos = document.getElementById('tablaPrestamos');
+    const search = document.getElementById('buscarPrestamo')?.value || '';
+    const estado = document.getElementById('filtroEstado')?.value || '';
+    const categoria = document.getElementById('filtroMaterial')?.value || '';
+    const params = new URLSearchParams();
+    if (search) params.append('search', search);
+    if (estado) params.append('estado', estado);
+    if (categoria) params.append('categoria', categoria);
     try {
-        const response = await fetch(`${API_URL}/prestamos`); // Llama al endpoint que acabamos de mejorar
+        const query = params.toString() ? `?${params.toString()}` : '';
+        const response = await fetch(`${API_URL}/prestamos${query}`); // Llama al endpoint que acabamos de mejorar
         if (!response.ok) throw new Error('No se pudieron cargar los préstamos');
 
         const prestamos = await response.json();
@@ -454,6 +483,14 @@ async function cargarPrestamos() {
     }
 }
 
+const btnBuscarPrestamos = document.getElementById('btnBuscarPrestamos');
+if (btnBuscarPrestamos) {
+    btnBuscarPrestamos.addEventListener('click', (e) => {
+        e.preventDefault();
+        cargarPrestamos();
+    });
+}
+
 // ¡AÑADE ESTA FUNCIÓN AL FINAL DEL ARCHIVO!
 // (La necesitamos para el botón de devolver que acabamos de agregar)
 function adminDevolver(id) {
@@ -462,6 +499,199 @@ function adminDevolver(id) {
     // 1. Abrir un modal
     // 2. Llamar a un endpoint /api/prestamos/devolver/:id
     // 3. Recargar la tabla
+}
+
+// ==========================================================
+// REPORTES Y GRÁFICOS
+// ==========================================================
+function inicializarReportes() {
+    const rangoMateriales = document.getElementById('rangoMateriales');
+    const rangoActividad = document.getElementById('rangoActividad');
+    const exportarExcel = document.getElementById('exportarExcel');
+    const exportarPDF = document.getElementById('exportarPDF');
+    const imprimirReporte = document.getElementById('imprimirReporte');
+
+    if (rangoMateriales) {
+        rangoMateriales.addEventListener('change', () => toggleRangoFechas('material'));
+        document.getElementById('aplicarMateriales')?.addEventListener('click', () => cargarReporteMateriales(obtenerParametrosRango('material')));
+    }
+    if (rangoActividad) {
+        rangoActividad.addEventListener('change', () => toggleRangoFechas('actividad'));
+        document.getElementById('aplicarActividad')?.addEventListener('click', () => cargarReporteActividad(obtenerParametrosRango('actividad')));
+    }
+
+    exportarExcel?.addEventListener('click', exportarReporteExcel);
+    exportarPDF?.addEventListener('click', exportarReportePDF);
+    imprimirReporte?.addEventListener('click', imprimirReportes);
+
+    cargarReporteMateriales({ meses: 6 });
+    cargarReporteActividad({ meses: 12 });
+}
+
+function toggleRangoFechas(tipo) {
+    const select = document.getElementById(`rango${tipo === 'material' ? 'Materiales' : 'Actividad'}`);
+    const contenedor = document.getElementById(`rango${tipo === 'material' ? 'Materiales' : 'Actividad'}Fechas`);
+    if (!select || !contenedor) return;
+    contenedor.style.display = select.value === 'custom' ? 'flex' : 'none';
+    const params = obtenerParametrosRango(tipo);
+    if (select.value !== 'custom') {
+        if (tipo === 'material') {
+            cargarReporteMateriales(params);
+        } else {
+            cargarReporteActividad(params);
+        }
+    }
+}
+
+function obtenerParametrosRango(tipo) {
+    const baseId = tipo === 'material' ? 'Materiales' : 'Actividad';
+    const select = document.getElementById(`rango${baseId}`);
+    const desde = document.getElementById(`${tipo}Desde`)?.value;
+    const hasta = document.getElementById(`${tipo}Hasta`)?.value;
+    if (select?.value === 'custom' && desde && hasta) {
+        return { from: desde, to: hasta };
+    }
+    const meses = parseInt(select?.value || '0', 10);
+    return { meses: meses > 0 ? meses : undefined };
+}
+
+async function cargarReporteMateriales(parametros = {}) {
+    const query = new URLSearchParams();
+    if (parametros.from) { query.append('from', parametros.from); }
+    if (parametros.to) { query.append('to', parametros.to); }
+    if (parametros.meses) { query.append('meses', parametros.meses); }
+
+    try {
+        const response = await fetch(`${API_URL}/reportes/prestamos-por-material?${query.toString()}`);
+        if (!response.ok) throw new Error('No se pudo cargar el reporte de materiales');
+        const data = await response.json();
+        datosReportes.materiales = data.datos || [];
+        datosReportes.rangoMateriales = data.rango;
+        renderChartMateriales();
+    } catch (error) {
+        console.error('Error cargando reporte de materiales:', error);
+    }
+}
+
+async function cargarReporteActividad(parametros = {}) {
+    const query = new URLSearchParams();
+    if (parametros.from) { query.append('from', parametros.from); }
+    if (parametros.to) { query.append('to', parametros.to); }
+    if (parametros.meses) { query.append('meses', parametros.meses); }
+
+    try {
+        const response = await fetch(`${API_URL}/reportes/actividad?${query.toString()}`);
+        if (!response.ok) throw new Error('No se pudo cargar el reporte de actividad');
+        const data = await response.json();
+        datosReportes.actividad = data.datos || [];
+        datosReportes.rangoActividad = data.rango;
+        renderChartActividad();
+    } catch (error) {
+        console.error('Error cargando actividad:', error);
+    }
+}
+
+function renderChartMateriales() {
+    const ctx = document.getElementById('chartMateriales');
+    if (!ctx) return;
+    const labels = datosReportes.materiales.map(d => d.categoria);
+    const valores = datosReportes.materiales.map(d => d.total);
+
+    if (chartMateriales) chartMateriales.destroy();
+    chartMateriales = new Chart(ctx, {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [{
+                label: 'Préstamos',
+                data: valores,
+                backgroundColor: '#0d6efd'
+            }]
+        },
+        options: { responsive: true }
+    });
+}
+
+function renderChartActividad() {
+    const ctx = document.getElementById('chartActividad');
+    if (!ctx) return;
+    const labels = datosReportes.actividad.map(d => formatearMes(d.mes));
+    const valores = datosReportes.actividad.map(d => d.total);
+
+    if (chartActividad) chartActividad.destroy();
+    chartActividad = new Chart(ctx, {
+        type: 'line',
+        data: {
+            labels,
+            datasets: [{
+                label: 'Préstamos',
+                data: valores,
+                borderColor: '#198754',
+                fill: false
+            }]
+        },
+        options: { responsive: true }
+    });
+}
+
+function formatearMes(isoDate) {
+    if (!isoDate) return '';
+    const fecha = new Date(isoDate);
+    return fecha.toLocaleDateString('es-CL', { month: 'short', year: 'numeric' });
+}
+
+function exportarReporteExcel() {
+    if (!window.XLSX) { alert('Biblioteca XLSX no disponible'); return; }
+    const wb = XLSX.utils.book_new();
+    const sheetMateriales = XLSX.utils.json_to_sheet(datosReportes.materiales.map(d => ({
+        Categoria: d.categoria,
+        Prestamos: d.total
+    })));
+    const sheetActividad = XLSX.utils.json_to_sheet(datosReportes.actividad.map(d => ({
+        Mes: formatearMes(d.mes),
+        Prestamos: d.total
+    })));
+    XLSX.utils.book_append_sheet(wb, sheetMateriales, 'Prestamos por material');
+    XLSX.utils.book_append_sheet(wb, sheetActividad, 'Actividad mensual');
+    XLSX.writeFile(wb, 'reportes-requify.xlsx');
+}
+
+function exportarReportePDF() {
+    const jsPDF = window.jspdf?.jsPDF;
+    if (!jsPDF) { alert('Biblioteca jsPDF no disponible'); return; }
+    const doc = new jsPDF();
+    doc.text('Reporte de préstamos por material', 10, 10);
+    datosReportes.materiales.forEach((d, idx) => {
+        doc.text(`${d.categoria}: ${d.total}`, 10, 20 + idx * 8);
+    });
+    let offset = 30 + datosReportes.materiales.length * 8;
+    doc.text('Actividad mensual', 10, offset);
+    datosReportes.actividad.forEach((d, idx) => {
+        doc.text(`${formatearMes(d.mes)}: ${d.total}`, 10, offset + 10 + idx * 8);
+    });
+    doc.save('reportes-requify.pdf');
+}
+
+function imprimirReportes() {
+    const ventana = window.open('', '_blank');
+    const materialesRows = datosReportes.materiales.map(d => `<tr><td>${d.categoria}</td><td>${d.total}</td></tr>`).join('');
+    const actividadRows = datosReportes.actividad.map(d => `<tr><td>${formatearMes(d.mes)}</td><td>${d.total}</td></tr>`).join('');
+    ventana.document.write(`
+        <html><head><title>Reportes</title></head><body>
+        <h3>Préstamos por material</h3>
+        <table border="1" cellspacing="0" cellpadding="6">
+            <tr><th>Material</th><th>Préstamos</th></tr>
+            ${materialesRows}
+        </table>
+        <h3>Actividad mensual</h3>
+        <table border="1" cellspacing="0" cellpadding="6">
+            <tr><th>Mes</th><th>Préstamos</th></tr>
+            ${actividadRows}
+        </table>
+        </body></html>
+    `);
+    ventana.document.close();
+    ventana.print();
 }
 
 

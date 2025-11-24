@@ -96,6 +96,35 @@ const recalculateMaterialStock = (materialId, callback) => {
     db.query(sql, [materialId, materialId, materialId], callback);
 };
 
+const buildDateRange = (query, defaultMonths) => {
+    const { meses, from, to } = query || {};
+    const endDate = to ? new Date(to) : new Date();
+    let startDate;
+
+    if (from) {
+        startDate = new Date(from);
+    } else if (meses) {
+        const months = parseInt(meses, 10);
+        if (!Number.isNaN(months) && months > 0) {
+            startDate = new Date(endDate);
+            startDate.setMonth(startDate.getMonth() - months);
+        }
+    }
+
+    if (!startDate) {
+        startDate = new Date(endDate);
+        startDate.setMonth(startDate.getMonth() - defaultMonths);
+    }
+
+    const pad = (value) => String(value).padStart(2, '0');
+    const formatDateOnly = (date) => `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+
+    return {
+        from: formatDateOnly(startDate),
+        to: formatDateOnly(endDate)
+    };
+};
+
 const obtenerNombreUsuario = (idUsuario, callback) => {
     db.query('SELECT NOMBRE FROM USUARIOS WHERE ID_USUARIO = ?', [idUsuario], (err, results) => {
         if (err) { return callback(err); }
@@ -286,9 +315,55 @@ app.delete('/api/usuarios/eliminar/:id', (req, res) => {
     });
 });
 
+app.put('/api/usuarios/:id/estado', (req, res) => {
+    const { id } = req.params;
+    const { estado } = req.body;
+    const nuevoEstado = parseInt(estado, 10);
+
+    if (![0, 1].includes(nuevoEstado)) {
+        return res.status(400).json({ message: 'Estado inválido' });
+    }
+
+    const sql = 'UPDATE USUARIOS SET ESTADO = ? WHERE ID_USUARIO = ?';
+    db.query(sql, [nuevoEstado, id], (err, result) => {
+        if (err) {
+            console.error(err);
+            return res.status(500).json({ message: 'Error al actualizar estado del usuario' });
+        }
+        if (result.affectedRows === 0) {
+            return res.status(404).json({ message: 'Usuario no encontrado' });
+        }
+        res.json({ success: true, message: 'Estado actualizado correctamente', estado: nuevoEstado });
+    });
+});
+
 // --- ENDPOINT PARA OBTENER TODOS LOS PRÉSTAMOS (Pestaña "Préstamos") ---
 // --- ENDPOINT PARA OBTENER TODOS LOS PRÉSTAMOS (PARA EL ADMIN) ---
 app.get('/api/prestamos', (req, res) => {
+    const { search, estado, categoria } = req.query;
+    const condiciones = [];
+    const valores = [];
+
+    if (search) {
+        const term = `%${search}%`;
+        condiciones.push(`(A.NOMBRE LIKE ? OR A.APELLIDO LIKE ? OR M.NOMBRE LIKE ? OR I.CODIGO_ITEM LIKE ?)`);
+        valores.push(term, term, term, term);
+    }
+
+    if (estado === 'activo') {
+        condiciones.push('S.ESTADO = 1');
+    } else if (estado === 'devuelto') {
+        condiciones.push('S.ESTADO = 2');
+    } else if (estado === 'vencido') {
+        condiciones.push('S.ESTADO = 1 AND S.FECHA_DEVOLUCION < NOW()');
+    }
+
+    if (categoria) {
+        condiciones.push('T.CODIGO_BASE = ?');
+        valores.push(categoria);
+    }
+
+    const where = condiciones.length ? `WHERE ${condiciones.join(' AND ')}` : '';
     const sql = `
         SELECT
             S.ID_SOLICITUD,
@@ -311,9 +386,10 @@ app.get('/api/prestamos', (req, res) => {
         JOIN TIPO_MATERIALES T ON M.ID_TIPO_MATERIAL = T.ID_TIPO_MATERIAL
         JOIN ASIGNATURAS ASIG ON S.ID_ASIGNATURA = ASIG.ID_ASIGNATURA
         JOIN USUARIOS U ON S.ID_USUARIO = U.ID_USUARIO
+        ${where}
         ORDER BY S.FECHA_SOLICITUD DESC
     `;
-    db.query(sql, (err, results) => {
+    db.query(sql, valores, (err, results) => {
         if (err) {
             console.error(err);
             return res.status(500).json({ message: 'Error al obtener préstamos' });
@@ -393,6 +469,51 @@ app.get('/api/dashboard/encargado-stats/:id_usuario', (req, res) => {
             completados: data.completados || 0,
             vencer: data.vencer || 0
         });
+    });
+});
+
+app.get('/api/reportes/prestamos-por-material', (req, res) => {
+    const rango = buildDateRange(req.query, 6);
+    const sql = `
+        SELECT
+            T.NOMBRE_TIPO_MATERIAL AS categoria,
+            COUNT(S.ID_SOLICITUD) AS total
+        FROM SOLICITUDES S
+        JOIN DETALLE_SOLICITUD DS ON S.ID_SOLICITUD = DS.ID_SOLICITUD
+        JOIN ITEMS_MATERIALES I ON DS.ID_ITEM = I.ID_ITEM
+        JOIN MATERIALES M ON I.ID_MATERIAL = M.ID_MATERIAL
+        JOIN TIPO_MATERIALES T ON M.ID_TIPO_MATERIAL = T.ID_TIPO_MATERIAL
+        WHERE DATE(S.FECHA_SOLICITUD) BETWEEN ? AND ?
+        GROUP BY T.NOMBRE_TIPO_MATERIAL
+        ORDER BY total DESC
+    `;
+
+    db.query(sql, [rango.from, rango.to], (err, results) => {
+        if (err) {
+            console.error(err);
+            return res.status(500).json({ message: 'Error al calcular préstamos por material' });
+        }
+        res.json({ rango, datos: results });
+    });
+});
+
+app.get('/api/reportes/actividad', (req, res) => {
+    const rango = buildDateRange(req.query, 12);
+    const sql = `
+        SELECT
+            DATE_FORMAT(S.FECHA_SOLICITUD, '%Y-%m-01') AS mes,
+            COUNT(S.ID_SOLICITUD) AS total
+        FROM SOLICITUDES S
+        WHERE DATE(S.FECHA_SOLICITUD) BETWEEN ? AND ?
+        GROUP BY mes
+        ORDER BY mes
+    `;
+    db.query(sql, [rango.from, rango.to], (err, results) => {
+        if (err) {
+            console.error(err);
+            return res.status(500).json({ message: 'Error al calcular actividad' });
+        }
+        res.json({ rango, datos: results });
     });
 });
 
@@ -853,6 +974,7 @@ app.get('/api/prestamos/activos/:id_usuario', (req, res) => {
             A.CURSO,
             M.NOMBRE as MATERIAL_NOMBRE,
             T.NOMBRE_TIPO_MATERIAL,
+            T.CODIGO_BASE,
             ASIG.NOMBRE AS ASIGNATURA,
             S.FECHA_SOLICITUD,
             S.FECHA_DEVOLUCION
@@ -1002,6 +1124,62 @@ app.get('/api/prestamos/historial/:id_usuario', (req, res) => {
         if (err) {
             console.error(err);
             return res.status(500).json({ message: 'Error al obtener el historial' });
+        }
+        res.json(results);
+    });
+});
+
+app.get('/api/historial', (req, res) => {
+    const { from, to, categoria, id_usuario } = req.query;
+    const condiciones = [];
+    const valores = [];
+
+    if (from) {
+        condiciones.push('DATE(S.FECHA_SOLICITUD) >= ?');
+        valores.push(from);
+    }
+    if (to) {
+        condiciones.push('DATE(S.FECHA_SOLICITUD) <= ?');
+        valores.push(to);
+    }
+    if (categoria) {
+        condiciones.push('T.CODIGO_BASE = ?');
+        valores.push(categoria);
+    }
+    if (id_usuario) {
+        condiciones.push('S.ID_USUARIO = ?');
+        valores.push(id_usuario);
+    }
+
+    const where = condiciones.length ? `WHERE ${condiciones.join(' AND ')}` : '';
+    const sql = `
+        SELECT
+            S.ID_SOLICITUD,
+            A.NOMBRE AS ALUMNO_NOMBRE,
+            A.APELLIDO AS ALUMNO_APELLIDO,
+            M.NOMBRE AS MATERIAL_NOMBRE,
+            T.NOMBRE_TIPO_MATERIAL,
+            I.CODIGO_ITEM,
+            I.ID_ITEM,
+            S.FECHA_SOLICITUD,
+            S.FECHA_DEVOLUCION,
+            S.ESTADO,
+            U.NOMBRE AS NOMBRE_USUARIO
+        FROM SOLICITUDES S
+        JOIN ALUMNOS A ON S.ID_ALUMNO = A.ID_ALUMNO
+        JOIN DETALLE_SOLICITUD DS ON S.ID_SOLICITUD = DS.ID_SOLICITUD
+        JOIN ITEMS_MATERIALES I ON DS.ID_ITEM = I.ID_ITEM
+        JOIN MATERIALES M ON I.ID_MATERIAL = M.ID_MATERIAL
+        JOIN TIPO_MATERIALES T ON M.ID_TIPO_MATERIAL = T.ID_TIPO_MATERIAL
+        JOIN USUARIOS U ON S.ID_USUARIO = U.ID_USUARIO
+        ${where}
+        ORDER BY S.FECHA_SOLICITUD DESC
+    `;
+
+    db.query(sql, valores, (err, results) => {
+        if (err) {
+            console.error(err);
+            return res.status(500).json({ message: 'Error al obtener historial' });
         }
         res.json(results);
     });

@@ -6,6 +6,8 @@
 const API_URL = 'http://localhost:3000/api';
 let usuarioLogueado = {};
 let prestamoADevolver = {};
+let prestamosActivosCache = [];
+let categoriasDisponibles = [];
 const modalDevolverBootstrap = new bootstrap.Modal(document.getElementById('modalDevolver'));
 const materialSelect = document.getElementById('materialSelect');
 const itemSelect = document.getElementById('itemSelect');
@@ -37,6 +39,7 @@ window.addEventListener('load', () => {
     cargarAlumnosSelect();
     cargarAsignaturasSelect();
     cargarMaterialesSelect();
+    cargarCategoriasFiltros();
 
     document.getElementById('btnConfirmarDevolucion').addEventListener('click', confirmarDevolucion);
 });
@@ -275,21 +278,31 @@ async function cargarTablaPendientes() {
 // --- ¡NUEVA VERSIÓN DE ESTA FUNCIÓN! ---
 async function cargarPrestamosActivosCompletos() {
     const tablaActivos = document.getElementById('tablaActivosCompleta');
+    const termino = (document.getElementById('buscarActivoInput')?.value || '').toLowerCase();
+    const categoria = document.getElementById('filtroMaterialActivo')?.value || '';
     try {
         const response = await fetch(`${API_URL}/prestamos/activos/${usuarioLogueado.id}`);
         const prestamos = await response.json();
-        
-        document.getElementById('totalActivos').textContent = `${prestamos.length} activos`;
+
+        prestamosActivosCache = prestamos;
+        const filtrados = prestamos.filter(p => {
+            const texto = `${p.ALUMNO_NOMBRE} ${p.ALUMNO_APELLIDO} ${p.CODIGO_ITEM}`.toLowerCase();
+            const coincideTexto = termino ? texto.includes(termino) : true;
+            const coincideCat = categoria ? p.CODIGO_BASE === categoria : true;
+            return coincideTexto && coincideCat;
+        });
+
+        document.getElementById('totalActivos').textContent = `${filtrados.length} activos`;
         
         // Limpiamos la tabla
         tablaActivos.innerHTML = '';
 
-        if (prestamos.length === 0) {
+        if (filtrados.length === 0) {
             tablaActivos.innerHTML = `<tr><td colspan="8" class="text-center text-muted">No hay préstamos activos</td></tr>`;
             return;
         }
 
-        prestamos.forEach((p, index) => {
+        filtrados.forEach((p, index) => {
             const estadoInfo = getEstadoPrestamo(p.FECHA_DEVOLUCION);
 
             // 1. Creamos la fila y las celdas de datos
@@ -341,6 +354,11 @@ async function cargarPrestamosActivosCompletos() {
         });
     } catch (error) { console.error("Error cargando préstamos activos:", error); }
 }
+
+document.getElementById('btnBuscarActivo')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    cargarPrestamosActivosCompletos();
+});
 
 async function actualizarInventarioDisplay() { /* (Sin cambios) */
     try {
@@ -470,8 +488,16 @@ function verDetallePrestamo(id) {
 // ¡NUEVA FUNCIÓN PARA EL HISTORIAL!
 async function cargarHistorial() {
     const tablaHistorial = document.getElementById('tablaHistorial');
+    const params = new URLSearchParams();
+    const desde = document.getElementById('fechaDesde')?.value;
+    const hasta = document.getElementById('fechaHasta')?.value;
+    const categoria = document.getElementById('filtroMaterialHistorial')?.value;
+    if (desde) params.append('from', desde);
+    if (hasta) params.append('to', hasta);
+    if (categoria) params.append('categoria', categoria);
+    params.append('id_usuario', usuarioLogueado.id);
     try {
-        const response = await fetch(`${API_URL}/prestamos/historial/${usuarioLogueado.id}`);
+        const response = await fetch(`${API_URL}/historial?${params.toString()}`);
         if (!response.ok) throw new Error('No se pudo cargar el historial');
 
         const prestamos = await response.json();
@@ -515,6 +541,11 @@ async function cargarHistorial() {
     }
 }
 
+document.getElementById('btnFiltrarHistorial')?.addEventListener('click', (e) => {
+    e.preventDefault();
+    cargarHistorial();
+});
+
 async function cargarAsignaturasSelect() {
     const select = document.getElementById('asignaturaSelect');
     try {
@@ -528,6 +559,28 @@ async function cargarAsignaturasSelect() {
     } catch (error) {
         console.error('Error cargando asignaturas:', error);
         select.innerHTML = '<option value="">Error al cargar asignaturas</option>';
+    }
+}
+
+async function cargarCategoriasFiltros() {
+    try {
+        const response = await fetch(`${API_URL}/categorias`);
+        if (!response.ok) throw new Error('No se pudieron cargar categorías');
+        categoriasDisponibles = await response.json();
+        const filtros = [document.getElementById('filtroMaterialActivo'), document.getElementById('filtroMaterialHistorial')];
+        filtros.forEach(select => {
+            if (!select) return;
+            const placeholder = select.id === 'filtroMaterialActivo' ? 'Todos los materiales' : 'Todos';
+            select.innerHTML = `<option value="">${placeholder}</option>`;
+            categoriasDisponibles.forEach(cat => {
+                const option = document.createElement('option');
+                option.value = cat.CODIGO_BASE;
+                option.textContent = cat.NOMBRE_TIPO_MATERIAL;
+                select.appendChild(option);
+            });
+        });
+    } catch (error) {
+        console.error('Error cargando categorías para filtros:', error);
     }
 }
 

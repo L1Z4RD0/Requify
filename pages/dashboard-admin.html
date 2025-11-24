@@ -311,10 +311,6 @@
                             <div class="col-md-3">
                                 <select class="form-select" id="filtroMaterial">
                                     <option value="">Todos los materiales</option>
-                                    <option value="Tablet">Tablets</option>
-                                    <option value="Notebook">Notebooks</option>
-                                    <option value="Libro">Libros</option>
-                                    <option value="Material Deportivo">Material Deportivo</option>
                                 </select>
                             </div>
                             <div class="col-md-2">
@@ -544,6 +540,20 @@
                                 <h5><i class="fas fa-chart-bar"></i> Préstamos por Material</h5>
                             </div>
                             <div class="card-body">
+                                <div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
+                                    <select class="form-select w-auto" id="rangoMateriales">
+                                        <option value="1">Último mes</option>
+                                        <option value="3">Últimos 3 meses</option>
+                                        <option value="6" selected>Últimos 6 meses</option>
+                                        <option value="12">Últimos 12 meses</option>
+                                        <option value="custom">Rango personalizado</option>
+                                    </select>
+                                    <div class="d-flex align-items-center gap-2" id="rangoMaterialesFechas" style="display:none;">
+                                        <input type="date" class="form-control" id="materialDesde">
+                                        <input type="date" class="form-control" id="materialHasta">
+                                        <button class="btn btn-primary" id="aplicarMateriales">Aplicar</button>
+                                    </div>
+                                </div>
                                 <canvas id="chartMateriales" height="200"></canvas>
                             </div>
                         </div>
@@ -555,6 +565,20 @@
                                 <h5><i class="fas fa-chart-line"></i> Actividad Mensual</h5>
                             </div>
                             <div class="card-body">
+                                <div class="d-flex align-items-center gap-2 mb-3 flex-wrap">
+                                    <select class="form-select w-auto" id="rangoActividad">
+                                        <option value="1">Último mes</option>
+                                        <option value="3">Últimos 3 meses</option>
+                                        <option value="6">Últimos 6 meses</option>
+                                        <option value="12" selected>Últimos 12 meses</option>
+                                        <option value="custom">Rango personalizado</option>
+                                    </select>
+                                    <div class="d-flex align-items-center gap-2" id="rangoActividadFechas" style="display:none;">
+                                        <input type="date" class="form-control" id="actividadDesde">
+                                        <input type="date" class="form-control" id="actividadHasta">
+                                        <button class="btn btn-primary" id="aplicarActividad">Aplicar</button>
+                                    </div>
+                                </div>
                                 <canvas id="chartActividad" height="200"></canvas>
                             </div>
                         </div>
@@ -591,7 +615,11 @@
 
     <!-- Bootstrap JS -->
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+
     <!-- Script personalizado -->
     <script src="../js/dashboard-admin.js"></script>
 </body>
