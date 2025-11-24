@@ -217,12 +217,15 @@
                                     <select class="form-select" id="materialSelect" required>
                                         <option value="">-- Cargando materiales... --</option>
                                     </select>
+                                    <small class="text-muted">Ubicación: <span id="ubicacionMaterialInfo">-</span></small>
                                 </div>
-                                
+
                                 <div class="col-md-6">
-                                    <label class="form-label">Cantidad *</label>
-                                    <input type="number" class="form-control" id="cantidadPrestamo" min="1" value="1" required>
-                                    <small class="text-muted">Disponibles: <span id="disponiblesInfo">-</span></small>
+                                    <label class="form-label">Seleccionar Ítem Disponible *</label>
+                                    <select class="form-select" id="itemSelect" required disabled>
+                                        <option value="">Seleccione un material para ver ítems...</option>
+                                    </select>
+                                    <small class="text-muted">Ítems disponibles: <span id="itemsDisponiblesInfo">0</span></small>
                                 </div>
                                 
                                 <div class="col-md-6">
@@ -322,7 +325,7 @@
                                         <th>ID</th>
                                         <th>Alumno</th>
                                         <th>Material</th>
-                                        <th>Cantidad</th>
+                                        <th>Ítem</th>
                                         <th>Fecha Préstamo</th>
                                         <th>Fecha Devolución</th>
                                         <th>Días Restantes</th>
@@ -390,11 +393,11 @@
                                         <th>ID</th>
                                         <th>Alumno</th>
                                         <th>Material</th>
-                                        <th>Cantidad</th>
+                                        <th>Ítem</th>
                                         <th>Fecha Préstamo</th>
                                         <th>Fecha Devolución</th>
                                         <th>Estado</th>
-                                        <th>Detalles</th>
+                                        <th>Recepcionado por</th>
                                     </tr>
                                 </thead>
                                 <tbody id="tablaHistorial">
