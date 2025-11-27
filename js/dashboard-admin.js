@@ -615,22 +615,47 @@ function renderChartMateriales() {
 function renderChartActividad() {
     const ctx = document.getElementById('chartActividad');
     if (!ctx) return;
-    const labels = datosReportes.actividad.map(d => formatearMes(d.mes));
-    const valores = datosReportes.actividad.map(d => d.total);
+    const actividadConPorcentaje = obtenerActividadConPorcentaje();
+    let labels = actividadConPorcentaje.map(d => d.categoria || 'Sin categoría');
+    let valores = actividadConPorcentaje.map(d => d.total || 0);
+    let porcentajes = actividadConPorcentaje.map(d => d.porcentaje);
+
+    if (!labels.length) {
+        labels = ['Sin datos'];
+        valores = [1];
+        porcentajes = [0];
+    }
+
+    const backgroundColor = generarColores(labels.length);
 
     if (chartActividad) chartActividad.destroy();
     chartActividad = new Chart(ctx, {
-        type: 'line',
+        type: 'doughnut',
         data: {
             labels,
             datasets: [{
-                label: 'Préstamos',
                 data: valores,
-                borderColor: '#198754',
-                fill: false
+                backgroundColor,
+                borderWidth: 1
             }]
         },
-        options: { responsive: true }
+        options: {
+            responsive: true,
+            cutout: '60%',
+            plugins: {
+                legend: { position: 'bottom' },
+                tooltip: {
+                    callbacks: {
+                        label: (context) => {
+                            const label = context.label || '';
+                            const valor = valores[context.dataIndex] || 0;
+                            const porcentaje = porcentajes[context.dataIndex] || 0;
+                            return `${label}: ${valor} préstamos (${porcentaje.toFixed(1)}%)`;
+                        }
+                    }
+                }
+            }
+        }
     });
 }
 
@@ -640,6 +665,19 @@ function formatearMes(isoDate) {
     return fecha.toLocaleDateString('es-CL', { month: 'short', year: 'numeric' });
 }
 
+function obtenerActividadConPorcentaje() {
+    const totalPrestamos = datosReportes.actividad.reduce((acc, d) => acc + (Number(d.total) || 0), 0);
+    return datosReportes.actividad.map(d => ({
+        ...d,
+        porcentaje: totalPrestamos ? ((Number(d.total) || 0) / totalPrestamos) * 100 : 0
+    }));
+}
+
+function generarColores(longitud) {
+    const paleta = ['#0d6efd', '#198754', '#ffc107', '#6610f2', '#fd7e14', '#20c997', '#6c757d', '#0dcaf0'];
+    return Array.from({ length: longitud }, (_, idx) => paleta[idx % paleta.length]);
+}
+
 function exportarReporteExcel() {
     if (!window.XLSX) { alert('Biblioteca XLSX no disponible'); return; }
     const wb = XLSX.utils.book_new();
@@ -647,12 +685,14 @@ function exportarReporteExcel() {
         Categoria: d.categoria,
         Prestamos: d.total
     })));
-    const sheetActividad = XLSX.utils.json_to_sheet(datosReportes.actividad.map(d => ({
-        Mes: formatearMes(d.mes),
-        Prestamos: d.total
+    const actividadConPorcentaje = obtenerActividadConPorcentaje();
+    const sheetActividad = XLSX.utils.json_to_sheet(actividadConPorcentaje.map(d => ({
+        Categoria: d.categoria || 'Sin categoría',
+        Prestamos: d.total,
+        Porcentaje: `${d.porcentaje.toFixed(1)}%`
     })));
     XLSX.utils.book_append_sheet(wb, sheetMateriales, 'Prestamos por material');
-    XLSX.utils.book_append_sheet(wb, sheetActividad, 'Actividad mensual');
+    XLSX.utils.book_append_sheet(wb, sheetActividad, 'Actividad por tipo');
     XLSX.writeFile(wb, 'reportes-requify.xlsx');
 }
 
@@ -665,9 +705,10 @@ function exportarReportePDF() {
         doc.text(`${d.categoria}: ${d.total}`, 10, 20 + idx * 8);
     });
     let offset = 30 + datosReportes.materiales.length * 8;
-    doc.text('Actividad mensual', 10, offset);
-    datosReportes.actividad.forEach((d, idx) => {
-        doc.text(`${formatearMes(d.mes)}: ${d.total}`, 10, offset + 10 + idx * 8);
+    const actividadConPorcentaje = obtenerActividadConPorcentaje();
+    doc.text('Actividad por tipo de material', 10, offset);
+    actividadConPorcentaje.forEach((d, idx) => {
+        doc.text(`${d.categoria || 'Sin categoría'}: ${d.total} (${d.porcentaje.toFixed(1)}%)`, 10, offset + 10 + idx * 8);
     });
     doc.save('reportes-requify.pdf');
 }
@@ -675,7 +716,8 @@ function exportarReportePDF() {
 function imprimirReportes() {
     const ventana = window.open('', '_blank');
     const materialesRows = datosReportes.materiales.map(d => `<tr><td>${d.categoria}</td><td>${d.total}</td></tr>`).join('');
-    const actividadRows = datosReportes.actividad.map(d => `<tr><td>${formatearMes(d.mes)}</td><td>${d.total}</td></tr>`).join('');
+    const actividadConPorcentaje = obtenerActividadConPorcentaje();
+    const actividadRows = actividadConPorcentaje.map(d => `<tr><td>${d.categoria || 'Sin categoría'}</td><td>${d.total}</td><td>${d.porcentaje.toFixed(1)}%</td></tr>`).join('');
     ventana.document.write(`
         <html><head><title>Reportes</title></head><body>
         <h3>Préstamos por material</h3>
@@ -683,9 +725,9 @@ function imprimirReportes() {
             <tr><th>Material</th><th>Préstamos</th></tr>
             ${materialesRows}
         </table>
-        <h3>Actividad mensual</h3>
+        <h3>Actividad por tipo de material</h3>
         <table border="1" cellspacing="0" cellpadding="6">
-            <tr><th>Mes</th><th>Préstamos</th></tr>
+            <tr><th>Material</th><th>Préstamos</th><th>Porcentaje</th></tr>
             ${actividadRows}
         </table>
         </body></html>

@@ -501,12 +501,16 @@ app.get('/api/reportes/actividad', (req, res) => {
     const rango = buildDateRange(req.query, 12);
     const sql = `
         SELECT
-            DATE_FORMAT(S.FECHA_SOLICITUD, '%Y-%m-01') AS mes,
+            T.NOMBRE_TIPO_MATERIAL AS categoria,
             COUNT(S.ID_SOLICITUD) AS total
         FROM SOLICITUDES S
+        JOIN DETALLE_SOLICITUD DS ON S.ID_SOLICITUD = DS.ID_SOLICITUD
+        JOIN ITEMS_MATERIALES I ON DS.ID_ITEM = I.ID_ITEM
+        JOIN MATERIALES M ON I.ID_MATERIAL = M.ID_MATERIAL
+        JOIN TIPO_MATERIALES T ON M.ID_TIPO_MATERIAL = T.ID_TIPO_MATERIAL
         WHERE DATE(S.FECHA_SOLICITUD) BETWEEN ? AND ?
-        GROUP BY mes
-        ORDER BY mes
+        GROUP BY T.ID_TIPO_MATERIAL, T.NOMBRE_TIPO_MATERIAL
+        ORDER BY total DESC
     `;
     db.query(sql, [rango.from, rango.to], (err, results) => {
         if (err) {
