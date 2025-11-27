@@ -28,6 +28,44 @@ body {
     padding: 40px;
     animation: fadeIn 0.5s ease-in;
 }
+body::before {
+    content: "";
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+
+    background:
+        linear-gradient(135deg, rgba(108,92,231,0.55), rgba(108,92,231,0.20)),
+        url("../img/Fondo-Requify.png") center/cover no-repeat;
+
+    filter: blur(4px);
+    transform: scale(1.1); /* evita bordes blancos con blur */
+
+    z-index: -1; /* queda detrás de todo */
+}
+
+.logo-screen-top-left {
+    position: fixed;
+    top: 20px;
+    left: 60px;
+    z-index: 2;            /* Encima del fondo pero debajo del login */
+    opacity: 0.8;          /* Se integra bien sin distraer */
+}
+
+.logo-screen-top-left img {
+    width: 150px;           /* Tamaño ideal, no molesta */
+    height: auto;
+    filter: drop-shadow(0 0 4px rgba(0, 0, 0, 0.4)); /* sutil contraste */
+}
+
+
+
+
+
+
+
 
 @keyframes fadeIn {
     from {
